@@ -1,19 +1,17 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import healthRouter from "./routes/health.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
 
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.use("/health", healthRouter);
+app.use("/api/auth", authRoutes);
 
-app.get("/health", (_req, res) => {
-  res.status(200).json({
-    status: "ok",
-    service: "warehouse-order-delivery-backend",
-    timestamp: new Date().toISOString()
-  });
-});
+
 
 export default app;

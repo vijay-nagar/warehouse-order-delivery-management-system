@@ -10,7 +10,7 @@ const databaseConfig: sql.config = {
   password: env.database.password,
 
   options: {
-    encrypt: true,
+    encrypt: false,
     trustServerCertificate: true,
   },
 
@@ -32,6 +32,18 @@ export const getDatabasePool = async (): Promise<sql.ConnectionPool> => {
   }
 
   return poolPromise;
+};
+
+export const checkDatabaseConnection = async (): Promise<boolean> => {
+  try {
+    const pool = await getDatabasePool();
+
+    await pool.request().query("SELECT 1 AS health");
+
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 export const closeDatabasePool = async (): Promise<void> => {
