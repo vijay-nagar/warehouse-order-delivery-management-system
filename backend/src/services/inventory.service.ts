@@ -66,12 +66,12 @@ export const updateInventoryService = async (
   if (!existingInventory) {
     throw new Error("Inventory not found");
   }
-
+  
   const newAvailableQuantity =
-    input.availableQuantity ?? existingInventory.availableQuantity;
+    input.availableQuantity ?? existingInventory.AvailableQuantity;
 
   const newReservedQuantity =
-    input.reservedQuantity ?? existingInventory.reservedQuantity;
+    input.reservedQuantity ?? existingInventory.ReservedQuantity;
 
   if (newReservedQuantity > newAvailableQuantity) {
     throw new Error(
