@@ -10,7 +10,7 @@ const databaseConfig: sql.config = {
   password: env.database.password,
 
   options: {
-    encrypt: false,
+    encrypt: true,
     trustServerCertificate: true,
   },
 
