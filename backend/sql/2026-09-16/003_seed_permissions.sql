@@ -10,7 +10,11 @@ FROM (VALUES
     ('ORDER_CREATE', 'Create a new customer order'),
     ('ORDER_VIEW', 'View orders'),
     ('ORDER_VIEW_DETAILS', 'View order details'),
-    ('ORDER_CANCEL', 'Cancel an eligible order')
+    ('ORDER_CANCEL', 'Cancel an eligible order'),
+    ('CUSTOMER_CREATE', 'Create a new customer'),
+    ('CUSTOMER_VIEW', 'View customers'),
+    ('CUSTOMER_UPDATE', 'Update customer details'),
+    ('CUSTOMER_DELETE', 'Delete a customer')
 ) AS v(Name, Description)
 WHERE NOT EXISTS (
     SELECT 1
