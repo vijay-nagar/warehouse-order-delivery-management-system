@@ -1,13 +1,13 @@
 export interface Inventory {
-  id: number;
-  warehouseId: number;
-  productId: number;
-  availableQuantity: number;
-  reservedQuantity: number;
-  reorderLevel: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date | null;
+  Id: number;
+  WarehouseId: number;
+  ProductId: number;
+  AvailableQuantity: number;
+  ReservedQuantity: number;
+  ReorderLevel: number;
+  IsActive: boolean;
+  CreatedAt: Date;
+  UpdatedAt: Date;
 }
 
 export interface CreateInventoryInput {
@@ -19,7 +19,7 @@ export interface CreateInventoryInput {
 }
 
 export interface UpdateInventoryInput {
-  availableQuantity?: number;
-  reservedQuantity?: number;
-  reorderLevel?: number;
+  availableQuantity?: number | undefined;
+  reservedQuantity?: number | undefined;
+  reorderLevel?: number | undefined;
 }

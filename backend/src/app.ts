@@ -8,7 +8,9 @@ import inventoryRoutes from "./routes/inventory.routes.js";
 import warehouseRoutes from "./routes/warehouse.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
-
+import zoneRoutes from "./routes/zone.routes.js";
+import shelfRoutes from "./routes/shelf.routes.js";
+import binRoutes from "./routes/bin.routes.js";
 const app = express();
 
 app.use(helmet());
@@ -21,5 +23,7 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/products", productRoutes);
-
+app.use("/api/zones", zoneRoutes);
+app.use("/api/shelves", shelfRoutes);
+app.use("/api/bins", binRoutes);
 export default app;
