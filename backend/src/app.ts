@@ -11,6 +11,7 @@ import productRoutes from "./routes/product.routes.js";
 import zoneRoutes from "./routes/zone.routes.js";
 import shelfRoutes from "./routes/shelf.routes.js";
 import binRoutes from "./routes/bin.routes.js";
+import inventoryTransactionRoutes from "./routes/inventory-transaction.routes.js";
 const app = express();
 
 app.use(helmet());
@@ -26,4 +27,5 @@ app.use("/api/products", productRoutes);
 app.use("/api/zones", zoneRoutes);
 app.use("/api/shelves", shelfRoutes);
 app.use("/api/bins", binRoutes);
+app.use("/api/inventory-transactions", inventoryTransactionRoutes);
 export default app;
