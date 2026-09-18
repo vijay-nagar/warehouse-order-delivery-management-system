@@ -15,6 +15,9 @@ import zoneRoutes from "./routes/zone.routes.js";
 import shelfRoutes from "./routes/shelf.routes.js";
 import binRoutes from "./routes/bin.routes.js";
 import inventoryTransactionRoutes from "./routes/inventory-transaction.routes.js";
+import pickingRoutes from "./routes/picking.routes.js";
+import packingRoutes from "./routes/packing.routes.js";
+import deliveryRoutes from "./routes/delivery.routes.js";
 
 const app = express();
 
@@ -36,6 +39,9 @@ app.use("/api/zones", zoneRoutes);
 app.use("/api/shelves", shelfRoutes);
 app.use("/api/bins", binRoutes);
 app.use("/api/inventory-transactions", inventoryTransactionRoutes);
+app.use("/api/picking", pickingRoutes);
+app.use("/api/packing", packingRoutes);
+app.use("/api/delivery", deliveryRoutes);
 
 
 export default app;

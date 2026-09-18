@@ -1,0 +1,323 @@
+import type { Request, Response } from "express";
+
+import { PickingRepository } from "../repositories/picking.repository.js";
+import { PickingService } from "../services/picking.service.js";
+import {
+  assignPickingTaskSchema,
+  completePickingTaskSchema,
+  updatePickingItemSchema,
+  createPickingTaskSchema,
+} from "../validators/picking.validator.js";
+
+const pickingService = new PickingService(
+  new PickingRepository(),
+);
+
+export const createPickingTask = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const validation = createPickingTaskSchema.safeParse(
+    req.body,
+  );
+
+  if (!validation.success) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.createTask(
+      validation.data,
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Picking task created successfully",
+      data: task,
+    });
+  } catch (error) {
+    console.error("Create picking task error:", error);
+
+    res.status(400).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to create picking task",
+    });
+  }
+};
+
+export const getPickingTasks = async (
+  _req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const tasks = await pickingService.getTasks();
+
+    res.status(200).json({
+      success: true,
+      message: "Picking tasks fetched successfully",
+      data: tasks,
+    });
+  } catch (error) {
+    console.error("Get picking tasks error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch picking tasks",
+    });
+  }
+};
+
+export const getPickingTaskById = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid picking task ID",
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.getTaskById(id);
+
+    res.status(200).json({
+      success: true,
+      message: "Picking task fetched successfully",
+      data: task,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch picking task";
+
+    res.status(message === "Picking task not found" ? 404 : 500).json({
+      success: false,
+      message,
+    });
+  }
+};
+
+export const assignPickingTask = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid picking task ID",
+    });
+    return;
+  }
+
+  const validation = assignPickingTaskSchema.safeParse(
+    req.body,
+  );
+
+  if (!validation.success) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.assignTask(
+      id,
+      validation.data,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Picking task assigned successfully",
+      data: task,
+    });
+  } catch (error) {
+    console.error("Assign picking task error:", error);
+
+    res.status(400).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to assign picking task",
+    });
+  }
+};
+
+export const startPickingTask = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid picking task ID",
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.startTask(id);
+
+    res.status(200).json({
+      success: true,
+      message: "Picking task started successfully",
+      data: task,
+    });
+  } catch (error) {
+    console.error("Start picking task error:", error);
+
+    res.status(400).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to start picking task",
+    });
+  }
+};
+
+export const completePickingTask = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid picking task ID",
+    });
+    return;
+  }
+
+  const validation = completePickingTaskSchema.safeParse(
+    req.body,
+  );
+
+  if (!validation.success) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.completeTask(
+      id,
+      validation.data,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Picking task completed successfully",
+      data: task,
+    });
+  } catch (error) {
+    console.error("Complete picking task error:", error);
+
+    res.status(400).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to complete picking task",
+    });
+  }
+};
+
+
+export const updatePickingItem = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const taskId = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+
+    if (
+      !Number.isInteger(taskId) ||
+      taskId <= 0 ||
+      !Number.isInteger(itemId) ||
+      itemId <= 0
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid picking task or item ID",
+      });
+      return;
+    }
+
+    const validation = updatePickingItemSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: validation.error.issues,
+      });
+      return;
+    }
+
+    const item = await pickingService.updatePickingItem(
+      taskId,
+      itemId,
+      validation.data.pickedQuantity,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Picking item updated successfully",
+      data: item,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "Picking task not found" ||
+        error.message === "Picking item not found"
+      ) {
+        res.status(404).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
+      if (error.message === "Picking task must be in PICKING status") {
+        res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    console.error("Update picking item error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update picking item",
+    });
+  }
+};
