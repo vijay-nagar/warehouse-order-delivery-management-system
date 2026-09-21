@@ -1,0 +1,51 @@
+services:
+  backend-1:
+    build: .
+    container_name: warehouse-backend-1
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      INSTANCE_NAME: backend-1
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+    ports:
+      - "3001:3000"
+
+  backend-2:
+    build: .
+    container_name: warehouse-backend-2
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      INSTANCE_NAME: backend-2
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+    ports:
+      - "3002:3000"
+
+  backend-3:
+    build: .
+    container_name: warehouse-backend-3
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      INSTANCE_NAME: backend-3
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+    ports:
+      - "3003:3000"
