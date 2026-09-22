@@ -148,6 +148,39 @@ export class DeliveryRepository {
     return result.recordset;
   }
 
+    async findByDeliveryBoyUserId(
+    deliveryBoyUserId: number,
+  ): Promise<DeliveryRow[]> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("DeliveryBoyUserId", sql.Int, deliveryBoyUserId)
+      .query<DeliveryRow>(`
+        SELECT
+          Id,
+          OrderId,
+          PackageId,
+          DeliveryBoyUserId,
+          Status,
+          AssignedAt,
+          PickedUpAt,
+          OutForDeliveryAt,
+          DeliveredAt,
+          FailedAt,
+          ReturnedAt,
+          FailureReason,
+          ReturnReason,
+          CreatedAt,
+          UpdatedAt
+        FROM dbo.Deliveries
+        WHERE DeliveryBoyUserId = @DeliveryBoyUserId
+        ORDER BY Id DESC;
+      `);
+
+    return result.recordset;
+  }
+
   async create(
     orderId: number,
     packageId: number,
@@ -427,6 +460,32 @@ export class DeliveryRepository {
 
     return row;
   }
+
+  async getTrackingByDeliveryId(
+    deliveryId: number,
+  ): Promise<TrackingRow[]> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("DeliveryId", sql.Int, deliveryId)
+      .query<TrackingRow>(`
+        SELECT
+          Id,
+          DeliveryId,
+          Status,
+          Latitude,
+          Longitude,
+          Remarks,
+          CreatedAt
+        FROM dbo.DeliveryTracking
+        WHERE DeliveryId = @DeliveryId
+        ORDER BY CreatedAt ASC;
+      `);
+
+    return result.recordset;
+  }
+  
   
   private async updateStatus(
     id: number,
