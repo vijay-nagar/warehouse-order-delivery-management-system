@@ -8,6 +8,7 @@ import pickingRoutes from "../routes/picking.routes.js";
 import packingRoutes from "../routes/packing.routes.js";
 import deliveryRoutes from "../routes/delivery.routes.js";
 import supportRoutes from "../routes/support.routes.js";
+import inventoryReservationRoutes from "../routes/inventory-reservation.routes.js";
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use("/picking", pickingRoutes);
 router.use("/packing", packingRoutes);
 router.use("/delivery", deliveryRoutes);
 router.use("/support", supportRoutes);
+router.use("/inventory-reservation", inventoryReservationRoutes);
 
 export default router;

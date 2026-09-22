@@ -104,6 +104,79 @@ export class PickingRepository {
       `);
   }
 
+  async createTaskInTransaction(
+    transaction: sql.Transaction,
+    orderId: number,
+    notes: string,
+  ): Promise<number> {
+    const result = await new sql.Request(transaction)
+      .input("OrderId", sql.Int, orderId)
+      .input("Notes", sql.NVarChar(1000), notes)
+      .query<{ Id: number }>(`
+        INSERT INTO dbo.PickingTasks
+        (
+          OrderId,
+          PickerUserId,
+          Status,
+          Notes,
+          CreatedAt,
+          UpdatedAt
+        )
+        OUTPUT INSERTED.Id
+        VALUES
+        (
+          @OrderId,
+          NULL,
+          'PENDING',
+          @Notes,
+          SYSUTCDATETIME(),
+          SYSUTCDATETIME()
+        );
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row) {
+      throw new Error("Failed to create picking task");
+    }
+
+    return row.Id;
+  }
+
+  async createItemInTransaction(
+    transaction: sql.Transaction,
+    pickingTaskId: number,
+    productId: number,
+    requiredQuantity: number,
+  ): Promise<void> {
+    await new sql.Request(transaction)
+      .input("PickingTaskId", sql.Int, pickingTaskId)
+      .input("ProductId", sql.Int, productId)
+      .input("RequiredQuantity", sql.Int, requiredQuantity)
+      .query(`
+        INSERT INTO dbo.PickingTaskItems
+        (
+          PickingTaskId,
+          ProductId,
+          RequiredQuantity,
+          PickedQuantity,
+          Status,
+          CreatedAt,
+          UpdatedAt
+        )
+        VALUES
+        (
+          @PickingTaskId,
+          @ProductId,
+          @RequiredQuantity,
+          0,
+          'PENDING',
+          SYSUTCDATETIME(),
+          SYSUTCDATETIME()
+        );
+      `);
+  }
+
   async findAll(): Promise<PickingTaskRow[]> {
     const pool = await getDatabasePool();
 

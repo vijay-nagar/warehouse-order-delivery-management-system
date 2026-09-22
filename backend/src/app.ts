@@ -44,3 +44,10 @@ app.get("/api/health", (_req, res) => {
 app.use("/api", gatewayRoutes);
 
 app.use(gatewayErrorHandler);
+
+
+
+
+
+
+
