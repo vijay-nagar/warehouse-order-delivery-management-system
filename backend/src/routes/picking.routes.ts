@@ -51,7 +51,6 @@ router.post(
   "/:id/complete",
   requirePermission("PICKING_COMPLETE"),
   completePickingTask,
-  updatePickingItem,
 );
 
 export default router;

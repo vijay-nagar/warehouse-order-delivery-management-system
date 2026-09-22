@@ -399,6 +399,47 @@ export class OrderRepository {
     };
   }
 
+  async updateStatus(
+    id: number,
+    status: Order["status"],
+  ): Promise<Order | null> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("id", sql.Int, id)
+      .input("status", sql.NVarChar(50), status)
+      .query<OrderRow>(`
+        UPDATE dbo.Orders
+        SET
+          Status = @status,
+          UpdatedAt = SYSUTCDATETIME()
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderNumber,
+          INSERTED.CustomerId,
+          INSERTED.WarehouseId,
+          INSERTED.Status,
+          INSERTED.TotalAmount,
+          INSERTED.ShippingAddressLine1,
+          INSERTED.ShippingAddressLine2,
+          INSERTED.ShippingCity,
+          INSERTED.ShippingState,
+          INSERTED.ShippingPostalCode,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        WHERE Id = @id;
+      `);
+
+    const order = result.recordset[0];
+
+    if (!order) {
+      return null;
+    }
+
+    return this.findById(order.Id);
+  }
+
   async cancel(id: number): Promise<Order | null> {
     const pool = await getDatabasePool();
 

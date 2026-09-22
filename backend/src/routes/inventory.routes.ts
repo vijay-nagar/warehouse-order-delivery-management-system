@@ -1,4 +1,5 @@
 import { Router } from "express";
+import reservationRoutes from "./inventory-reservation.routes.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
 
@@ -11,6 +12,8 @@ import {
 } from "../controllers/inventory.controller.js";
 
 const router = Router();
+
+router.use("/reservations", reservationRoutes);
 
 router.post(
   "/",
