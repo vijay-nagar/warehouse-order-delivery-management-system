@@ -1,26 +1,17 @@
 import { useEffect, useState } from "react";
-import { api } from "../../../services/api";
+
+import { healthApi } from "../../../services/api/backend";
+import { toApiError } from "../../../services/api/errors";
 
 interface HealthResponse {
   status?: string;
-  instance?: string;
   service?: string;
-}
-
-interface RoutesResponse {
-  service?: string;
-  routes?: Record<
-    string,
-    {
-      prefix: string;
-      service: string;
-    }
-  >;
+  database?: string;
+  timestamp?: string;
 }
 
 export default function SystemPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [routes, setRoutes] = useState<RoutesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -29,18 +20,11 @@ export default function SystemPage() {
       setLoading(true);
       setError("");
 
-      const [healthResponse, routesResponse] = await Promise.all([
-        api.get<HealthResponse>("/api/health"),
-        api.get<RoutesResponse>("/api/routes"),
-      ]);
+      const response = await healthApi.health();
 
-      setHealth(healthResponse.data);
-      setRoutes(routesResponse.data);
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ??
-          "Unable to load system information.",
-      );
+      setHealth(response as HealthResponse);
+    } catch (requestError) {
+      setError(toApiError(requestError).message);
     } finally {
       setLoading(false);
     }
@@ -53,7 +37,9 @@ export default function SystemPage() {
   if (loading) {
     return (
       <section className="module-page">
-        <div className="module-state">Loading system information...</div>
+        <div className="module-state">
+          Loading system information...
+        </div>
       </section>
     );
   }
@@ -63,7 +49,7 @@ export default function SystemPage() {
       <div className="module-page-header">
         <div>
           <h1>System</h1>
-          <p>Monitor API Gateway and backend runtime information.</p>
+          <p>Monitor backend and database runtime information.</p>
         </div>
 
         <button
@@ -92,35 +78,24 @@ export default function SystemPage() {
 
           <dl className="system-details">
             <div>
-              <dt>Instance</dt>
-              <dd>{health?.instance ?? "-"}</dd>
+              <dt>Service</dt>
+              <dd>{health?.service ?? "-"}</dd>
             </div>
 
             <div>
-              <dt>Service</dt>
-              <dd>{health?.service ?? "Backend"}</dd>
+              <dt>Database</dt>
+              <dd>{health?.database ?? "-"}</dd>
+            </div>
+
+            <div>
+              <dt>Last Updated</dt>
+              <dd>
+                {health?.timestamp
+                  ? new Date(health.timestamp).toLocaleString()
+                  : "-"}
+              </dd>
             </div>
           </dl>
-        </div>
-
-        <div className="module-panel system-card">
-          <h2>API Gateway</h2>
-
-          <div className="system-value">
-            <span className="system-dot" />
-            {routes?.service ?? "api-gateway"}
-          </div>
-
-          <div className="gateway-routes">
-            {Object.entries(routes?.routes ?? {}).map(
-              ([key, route]) => (
-                <div className="gateway-route" key={key}>
-                  <strong>{route.service}</strong>
-                  <span>{route.prefix}</span>
-                </div>
-              ),
-            )}
-          </div>
         </div>
       </div>
     </section>

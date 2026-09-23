@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { clearAuth, getStoredUser } from "../../utils/authStorage";
+import { clearAuth, getStoredUser } from "../../services/storage/authStorage";
 
 interface HeaderProps {
   onMenuClick: () => void;

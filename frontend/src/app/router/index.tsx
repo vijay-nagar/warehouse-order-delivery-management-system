@@ -1,20 +1,26 @@
 import { createBrowserRouter } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import ProtectedRoute from "../../components/common/ProtectedRoute";
 import AdminLayout from "../../layouts/AdminLayout/AdminLayout";
 import AuthLayout from "../../layouts/AuthLayout/AuthLayout";
-import LoginPage from "../../features/auth/pages/LoginPage";
-import DashboardPage from "../../features/dashboard/pages/DashboardPage";
-import OrdersPage from "../../features/orders/pages/OrdersPage";
-import WarehousePage from "../../features/warehouse/pages/WarehousePage";
-import InventoryPage from "../../features/inventory/pages/InventoryPage";
-import PickingPage from "../../features/picking/pages/PickingPage";
-import PackingPage from "../../features/packing/pages/PackingPage";
-import DeliveryPage from "../../features/delivery/pages/DeliveryPage";
-import CustomersPage from "../../features/customers/pages/CustomersPage";
-import ProductsPage from "../../features/products/pages/ProductsPage";
-import NotificationsPage from "../../features/notifications/pages/NotificationsPage";
-import ReportsPage from "../../features/reports/pages/ReportsPage";
-import SystemPage from "../../features/system/pages/SystemPage";
+const LoginPage = lazy(() => import("../../features/auth/pages/LoginPage"));
+const DashboardPage = lazy(() => import("../../features/dashboard/pages/DashboardPage"));
+const OrdersPage = lazy(() => import("../../features/orders/pages/OrdersPage"));
+const WarehousePage = lazy(() => import("../../features/warehouse/pages/WarehousePage"));
+const ZonesPage = lazy(() => import("../../features/warehouse/pages/ZonesPage"));
+const ShelvesPage = lazy(() => import("../../features/warehouse/pages/ShelvesPage"));
+const BinsPage = lazy(() => import("../../features/warehouse/pages/BinsPage"));
+const InventoryPage = lazy(() => import("../../features/inventory/pages/InventoryPage"));
+const PickingPage = lazy(() => import("../../features/picking/pages/PickingPage"));
+const PackingPage = lazy(() => import("../../features/packing/pages/PackingPage"));
+const DeliveryPage = lazy(() => import("../../features/delivery/pages/DeliveryPage"));
+const CustomersPage = lazy(() => import("../../features/customers/pages/CustomersPage"));
+const ProductsPage = lazy(() => import("../../features/products/pages/ProductsPage"));
+const NotificationsPage = lazy(() => import("../../features/notifications/pages/NotificationsPage"));
+const ReportsPage = lazy(() => import("../../features/reports/pages/ReportsPage"));
+const SystemPage = lazy(() => import("../../features/system/pages/SystemPage"));
+
+const load = (Page: React.ComponentType) => <Suspense fallback={<div className="module-state">Loading...</div>}><Page /></Suspense>;
 
 export const router = createBrowserRouter([
   {
@@ -22,7 +28,7 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/login",
-        element: <LoginPage />,
+        element: load(LoginPage),
       },
     ],
   },
@@ -34,51 +40,54 @@ export const router = createBrowserRouter([
         children: [
           {
             path: "/",
-            element: <DashboardPage />,
+            element: load(DashboardPage),
           },
           {
             path: "/orders",
-            element: <OrdersPage />,
+            element: load(OrdersPage),
           },
           {
             path: "/warehouses",
-            element: <WarehousePage />,
+            element: load(WarehousePage),
           },
+          { path: "/zones", element: load(ZonesPage) },
+          { path: "/shelves", element: load(ShelvesPage) },
+          { path: "/bins", element: load(BinsPage) },
           {
             path: "/inventory",
-            element: <InventoryPage />,
+            element: load(InventoryPage),
           },
           {
             path: "/picking",
-            element: <PickingPage />,
+            element: load(PickingPage),
           },
           {
             path: "/packing",
-            element: <PackingPage />,
+            element: load(PackingPage),
           },
           {
             path: "/delivery",
-            element: <DeliveryPage />,
+            element: load(DeliveryPage),
           },
           {
             path: "/customers",
-            element: <CustomersPage />,
+            element: load(CustomersPage),
           },
           {
             path: "/products",
-            element: <ProductsPage />,
+            element: load(ProductsPage),
           },
           {
             path: "/notifications",
-            element: <NotificationsPage />,
+            element: load(NotificationsPage),
           },
           {
             path: "/reports",
-            element: <ReportsPage />,
+            element: load(ReportsPage),
           },
           {
             path: "/system",
-            element: <SystemPage />,
+            element: load(SystemPage),
           },
         ],
       },

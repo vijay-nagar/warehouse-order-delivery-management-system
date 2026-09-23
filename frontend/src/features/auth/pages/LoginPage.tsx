@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../services/api";
-import { setAuth } from "../../../utils/authStorage";
+import { authApi } from "../../../services/api/backend";
+import { setAuth } from "../../../services/storage/authStorage";
+import { useAsyncRequest } from "../../../hooks/useAsyncRequest";
 import type { LoginResponse } from "../../../types/auth";
 
 export default function LoginPage() {
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { execute, error: requestError } = useAsyncRequest<LoginResponse["data"]>();
 
   const from = location.state?.from?.pathname ?? "/";
 
@@ -29,23 +31,16 @@ export default function LoginPage() {
       setLoading(true);
       setError("");
 
-      const response = await api.post<LoginResponse>("/api/auth/login", {
-        username: username.trim(),
-        password,
-      });
+      const response = await execute(() => authApi.login({ username: username.trim(), password }));
 
-      setAuth(response.data.data.accessToken, response.data.data.user);
-
-      if (!rememberMe) {
-        sessionStorage.setItem("warehouse-session", "active");
+      if (!response) {
+        setError(requestError?.message ?? "Unable to sign in. Please try again.");
+        return;
       }
 
+      setAuth(response.accessToken, response.user, rememberMe);
+
       navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ??
-          "Login failed. Please check your username and password.",
-      );
     } finally {
       setLoading(false);
     }

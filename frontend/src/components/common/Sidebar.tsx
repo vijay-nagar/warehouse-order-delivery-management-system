@@ -1,14 +1,19 @@
 import { NavLink } from "react-router-dom";
+import { getStoredUser } from "../../services/storage/authStorage";
+import { hasRole } from "../../permissions/access";
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const navigation = [
+const navigation: Array<{ label: string; path: string; roles?: string[] }> = [
   { label: "Dashboard", path: "/" },
   { label: "Orders", path: "/orders" },
   { label: "Warehouse", path: "/warehouses" },
+  { label: "Zones", path: "/zones" },
+  { label: "Shelves", path: "/shelves" },
+  { label: "Bins", path: "/bins" },
   { label: "Inventory", path: "/inventory" },
   { label: "Picking", path: "/picking" },
   { label: "Packing", path: "/packing" },
@@ -21,6 +26,7 @@ const navigation = [
 ];
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const user = getStoredUser();
   return (
     <>
       {isOpen && (
@@ -52,7 +58,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         <nav className="sidebar-nav">
-          {navigation.map((item) => (
+          {navigation.filter((item) => !item.roles || item.roles.some((role) => hasRole(user, role))).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

@@ -1,10 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../../../services/api";
+import { deliveryApi, inventoryApi, ordersApi, packingApi, pickingApi, reportsApi } from "../../../services/api/backend";
+import { toApiError } from "../../../services/api/errors";
 import StatCard from "../components/StatCard";
 import StatusCard from "../components/StatusCard";
 import RecentOrders from "../components/RecentOrders";
+import OrderStatusChart from "../components/OrderStatusChart";
 
 type Row = Record<string, unknown>;
+
+interface OrderStatusReport {
+  status: string;
+  orderCount: number;
+  totalAmount: number;
+}
+
+interface OrderSummaryReport {
+  totalOrders: number;
+  totalSales: number;
+  averageOrderValue: number;
+  statusBreakdown: OrderStatusReport[];
+}
 
 interface DashboardData {
   orders: Row[];
@@ -12,12 +27,14 @@ interface DashboardData {
   picking: Row[];
   packing: Row[];
   delivery: Row[];
+  report: OrderSummaryReport;
 }
 
 function extractRows(payload: unknown): Row[] {
   if (Array.isArray(payload)) {
     return payload.filter(
-      (item): item is Row => !!item && typeof item === "object",
+      (item): item is Row =>
+        !!item && typeof item === "object",
     );
   }
 
@@ -32,7 +49,8 @@ function extractRows(payload: unknown): Row[] {
 
     if (Array.isArray(value)) {
       return value.filter(
-        (item): item is Row => !!item && typeof item === "object",
+        (item): item is Row =>
+          !!item && typeof item === "object",
       );
     }
 
@@ -66,6 +84,8 @@ function isActiveStatus(status: string) {
     "returned",
     "failed",
     "closed",
+    "picked",
+    "packed",
   ].includes(status);
 }
 
@@ -81,6 +101,12 @@ function isPendingOrder(status: string) {
   ].includes(status);
 }
 
+function formatCurrency(value: number) {
+  return `₹${value.toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>({
     orders: [],
@@ -88,6 +114,12 @@ export default function DashboardPage() {
     picking: [],
     packing: [],
     delivery: [],
+    report: {
+      totalOrders: 0,
+      totalSales: 0,
+      averageOrderValue: 0,
+      statusBreakdown: [],
+    },
   });
 
   const [loading, setLoading] = useState(true);
@@ -110,26 +142,39 @@ export default function DashboardPage() {
         pickingResponse,
         packingResponse,
         deliveryResponse,
+        reportResponse,
       ] = await Promise.all([
-        api.get("/api/orders"),
-        api.get("/api/inventory"),
-        api.get("/api/picking"),
-        api.get("/api/packing"),
-        api.get("/api/delivery"),
+        ordersApi.list(),
+        inventoryApi.list(),
+        pickingApi.list(),
+        packingApi.list(),
+        deliveryApi.list(),
+        reportsApi.orderSummary(),
       ]);
 
+      const report = reportResponse ?? {};
+
       setData({
-        orders: extractRows(ordersResponse.data),
-        inventory: extractRows(inventoryResponse.data),
-        picking: extractRows(pickingResponse.data),
-        packing: extractRows(packingResponse.data),
-        delivery: extractRows(deliveryResponse.data),
+        orders: extractRows(ordersResponse),
+        inventory: extractRows(inventoryResponse),
+        picking: extractRows(pickingResponse),
+        packing: extractRows(packingResponse),
+        delivery: extractRows(deliveryResponse),
+        report: {
+          totalOrders: Number(report.totalOrders ?? 0),
+          totalSales: Number(report.totalSales ?? 0),
+          averageOrderValue: Number(
+            report.averageOrderValue ?? 0,
+          ),
+          statusBreakdown: Array.isArray(
+            report.statusBreakdown,
+          )
+            ? report.statusBreakdown
+            : [],
+        },
       });
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ??
-          "Unable to load dashboard data. Please try again.",
-      );
+    } catch (requestError) {
+      setError(toApiError(requestError).message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -161,9 +206,21 @@ export default function DashboardPage() {
       (delivery) => getStatus(delivery) === "returned",
     ).length;
 
+    const cancelledOrders =
+      data.report.statusBreakdown
+        .filter(
+          (item) =>
+            item.status.toLowerCase() === "cancelled" ||
+            item.status.toLowerCase() === "canceled",
+        )
+        .reduce((total, item) => total + item.orderCount, 0);
+
     return {
-      totalOrders: data.orders.length,
+      totalOrders: data.report.totalOrders,
+      totalSales: data.report.totalSales,
+      averageOrderValue: data.report.averageOrderValue,
       pendingOrders,
+      cancelledOrders,
       inventoryItems: data.inventory.length,
       activeDeliveries,
       activePicking,
@@ -179,7 +236,9 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <section className="dashboard-page">
-        <div className="module-state">Loading dashboard...</div>
+        <div className="module-state">
+          Loading dashboard...
+        </div>
       </section>
     );
   }
@@ -189,7 +248,10 @@ export default function DashboardPage() {
       <div className="dashboard-heading">
         <div>
           <h1>Dashboard</h1>
-          <p>Overview of orders, inventory and warehouse operations.</p>
+          <p>
+            Overview of orders, inventory and warehouse
+            operations.
+          </p>
         </div>
 
         <button
@@ -205,46 +267,129 @@ export default function DashboardPage() {
       {error && (
         <div className="module-alert module-alert-error">
           <span>{error}</span>
-          <button type="button" onClick={() => void loadDashboard()}>
+
+          <button
+            type="button"
+            onClick={() => void loadDashboard()}
+          >
             Retry
           </button>
         </div>
       )}
 
-      <div className="dashboard-stats">
+      <div className="dashboard-stats-grid">
         <StatCard
           title="Total Orders"
-          value={summary.totalOrders.toLocaleString()}
-          description="Orders in system"
+          value={summary.totalOrders.toLocaleString("en-IN")}
+          description="Orders in database"
+          icon="🛒"
+          color="blue"
         />
 
         <StatCard
-          title="Pending Orders"
-          value={summary.pendingOrders.toLocaleString()}
-          description="Currently processing"
+          title="Total Sales"
+          value={formatCurrency(summary.totalSales)}
+          description="Total order revenue"
+          icon="💰"
+          color="green"
         />
 
         <StatCard
-          title="Inventory Items"
-          value={summary.inventoryItems.toLocaleString()}
-          description="Current stock records"
+          title="Average Order Value"
+          value={formatCurrency(summary.averageOrderValue)}
+          description="Average order amount"
+          icon="📈"
+          color="purple"
         />
 
         <StatCard
-          title="Active Deliveries"
-          value={summary.activeDeliveries}
-          description="Currently active"
+          title="Cancelled Orders"
+          value={summary.cancelledOrders.toLocaleString("en-IN")}
+          description="Cancelled orders"
+          icon="⚠️"
+          color="red"
         />
       </div>
+      <div className="dashboard-charts-grid">
+        <OrderStatusChart
+          statusBreakdown={data.report.statusBreakdown}
+          totalOrders={summary.totalOrders}
+        />
 
+        <section className="dashboard-panel dashboard-chart-panel">
+          <div className="dashboard-panel-header dashboard-chart-header">
+            <div>
+              <h2>Warehouse Operations</h2>
+              <p>Tasks across different operational stages</p>
+            </div>
+          </div>
+
+          <div className="dashboard-operation-bars">
+            {[
+              {
+                label: "Picking",
+                value: summary.activePicking,
+                className: "picking",
+              },
+              {
+                label: "Packing",
+                value: summary.activePacking,
+                className: "packing",
+              },
+              {
+                label: "Delivery",
+                value: summary.activeDeliveries,
+                className: "delivery",
+              },
+              {
+                label: "Returns",
+                value: summary.returns,
+                className: "returns",
+              },
+            ].map((item) => (
+              <div
+                className="dashboard-operation-bar-item"
+                key={item.label}
+              >
+                <strong>{item.value}</strong>
+
+                <div className="dashboard-operation-bar-track">
+                  <div
+                    className={`dashboard-operation-bar ${item.className}`}
+                    style={{
+                      height: `${Math.max(item.value * 3, 4)}px`,
+                    }}
+                  />
+                </div>
+
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
       <div className="dashboard-section-heading">
         <div>
           <h2>Warehouse Operations</h2>
-          <p>Current activity across operational stages.</p>
+          <p>
+            Current activity across operational stages.
+          </p>
         </div>
       </div>
 
       <div className="dashboard-status-grid">
+        <StatusCard
+          title="Pending Orders"
+          value={summary.pendingOrders}
+          description="Currently processing"
+        />
+
+        <StatusCard
+          title="Inventory Items"
+          value={summary.inventoryItems}
+          description="Current stock records"
+        />
+
         <StatusCard
           title="Picking"
           value={summary.activePicking}
