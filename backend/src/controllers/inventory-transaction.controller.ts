@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 
+import { getSafeErrorMessage } from "../utils/error-response.js";
 import {
   stockInService,
   stockOutService,
@@ -32,7 +33,7 @@ export const stockIn = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Server error";
+    const message = getSafeErrorMessage(error, "Server error");
 
     return res.status(message === "Insufficient stock" ? 400 : 500).json({
       message,
@@ -59,7 +60,7 @@ export const stockOut = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Server error";
+    const message = getSafeErrorMessage(error, "Server error");
 
     return res.status(
       message === "Insufficient stock" ||
@@ -91,7 +92,7 @@ export const stockAdjustment = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Server error";
+    const message = getSafeErrorMessage(error, "Server error");
 
     return res.status(500).json({
       message,
@@ -119,7 +120,7 @@ export const getTransactionHistory = async (
       data: result,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Server error";
+    const message = getSafeErrorMessage(error, "Server error");
 
     return res.status(500).json({
       message,

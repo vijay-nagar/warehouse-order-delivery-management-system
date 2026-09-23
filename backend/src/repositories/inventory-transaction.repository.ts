@@ -27,7 +27,8 @@ export const executeInventoryTransaction = async (
     const inventoryResult = await request.query(`
       SELECT
         Id,
-        AvailableQuantity
+        AvailableQuantity,
+        ReservedQuantity
       FROM Inventory WITH (UPDLOCK, ROWLOCK)
       WHERE Id = @InventoryId
         AND IsActive = 1;
@@ -40,6 +41,7 @@ export const executeInventoryTransaction = async (
     }
 
     const previousQuantity = inventory.AvailableQuantity;
+    const reservedQuantity = inventory.ReservedQuantity;
 
     let newQuantity = previousQuantity;
 
@@ -56,6 +58,12 @@ export const executeInventoryTransaction = async (
     }
 
     if (input.transactionType === "ADJUSTMENT") {
+      if (input.quantity < reservedQuantity) {
+        throw new Error(
+          "Adjustment quantity cannot be less than reserved stock",
+        );
+      }
+
       newQuantity = input.quantity;
     }
 

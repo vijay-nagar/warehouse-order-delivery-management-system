@@ -40,6 +40,40 @@ export class OrderRepository {
     await transaction.begin();
 
     try {
+      const customerResult = await transaction
+        .request()
+        .input("customerId", sql.Int, input.customerId)
+        .query<{ Id: number }>(`
+          SELECT Id
+          FROM dbo.Customers
+          WHERE Id = @customerId
+            AND IsActive = 1;
+        `);
+
+      if (!customerResult.recordset[0]) {
+        throw new Error(
+          `Customer ${input.customerId} not found or inactive`,
+        );
+      }
+
+      if (input.warehouseId !== undefined) {
+        const warehouseResult = await transaction
+          .request()
+          .input("warehouseId", sql.Int, input.warehouseId)
+          .query<{ Id: number }>(`
+            SELECT Id
+            FROM dbo.Warehouses
+            WHERE Id = @warehouseId
+              AND IsActive = 1;
+          `);
+
+        if (!warehouseResult.recordset[0]) {
+          throw new Error(
+            `Warehouse ${input.warehouseId} not found or inactive`,
+          );
+        }
+      }
+
       const orderNumber = `ORD-${Date.now()}`;
 
       const orderResult = await transaction

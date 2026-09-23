@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
+import { requireRoles } from "../middleware/role.middleware.js";
+import { requirePositiveIntParam } from "../middleware/param-validation.middleware.js";
 import {
   createPackingTask,
   getPackingTasks,
@@ -17,10 +19,15 @@ router.use(authenticate);
 
 router.post("/", requirePermission("PACKING_CREATE"), createPackingTask);
 router.get("/", requirePermission("PACKING_VIEW"), getPackingTasks);
-router.get("/:id", requirePermission("PACKING_VIEW"), getPackingTaskById);
-router.post("/:id/assign", requirePermission("PACKING_ASSIGN"), assignPackingTask);
-router.post("/:id/start", requirePermission("PACKING_START"), startPackingTask);
-router.post("/:id/packages", requirePermission("PACKING_CREATE_PACKAGE"), createPackage);
-router.post("/:id/complete", requirePermission("PACKING_COMPLETE"), completePackingTask);
+router.get("/:id",
+  requirePositiveIntParam("id"), requirePermission("PACKING_VIEW"), getPackingTaskById);
+router.post("/:id/assign",
+  requirePositiveIntParam("id"), requirePermission("PACKING_ASSIGN"), requireRoles("Packer"), assignPackingTask);
+router.post("/:id/start",
+  requirePositiveIntParam("id"), requirePermission("PACKING_START"), requireRoles("Packer"), startPackingTask);
+router.post("/:id/packages",
+  requirePositiveIntParam("id"), requirePermission("PACKING_CREATE_PACKAGE"), requireRoles("Packer"), createPackage);
+router.post("/:id/complete",
+  requirePositiveIntParam("id"), requirePermission("PACKING_COMPLETE"), requireRoles("Packer"), completePackingTask);
 
 export default router;

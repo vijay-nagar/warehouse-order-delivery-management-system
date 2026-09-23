@@ -44,4 +44,40 @@ export class InventoryReservationService {
       order.warehouseId,
     );
   }
+
+  async releaseOrderReservations(
+    orderId: number,
+  ): Promise<InventoryReservation[]> {
+    const order = await this.orderRepository.findById(orderId);
+
+    if (!order) {
+      throw new Error(`Order ${orderId} not found.`);
+    }
+
+    if (!["CANCELLED", "FAILED", "RETURNED"].includes(order.status)) {
+      throw new Error(
+        `Order ${orderId} cannot release reservations from status ${order.status}.`,
+      );
+    }
+
+    return this.reservationRepository.releaseOrderReservations(orderId);
+  }
+
+  async consumeOrderReservations(
+    orderId: number,
+  ): Promise<InventoryReservation[]> {
+    const order = await this.orderRepository.findById(orderId);
+
+    if (!order) {
+      throw new Error(`Order ${orderId} not found.`);
+    }
+
+    if (!["PACKED", "OUT_FOR_DELIVERY", "DELIVERED"].includes(order.status)) {
+      throw new Error(
+        `Order ${orderId} cannot consume reservations from status ${order.status}.`,
+      );
+    }
+
+    return this.reservationRepository.consumeOrderReservations(orderId);
+  }
 }

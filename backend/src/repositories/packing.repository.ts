@@ -89,6 +89,63 @@ export class PackingRepository {
     return row;
   }
 
+  async createTaskInTransaction(
+    transaction: sql.Transaction,
+    orderId: number,
+    pickingTaskId: number,
+    notes: string,
+  ): Promise<PackingTaskRow> {
+    const result = await new sql.Request(transaction)
+      .input("OrderId", sql.Int, orderId)
+      .input("PickingTaskId", sql.Int, pickingTaskId)
+      .input("Notes", sql.NVarChar(1000), notes)
+      .query<PackingTaskRow>(`
+        INSERT INTO dbo.PackingTasks
+        (
+          OrderId,
+          PickingTaskId,
+          PackerUserId,
+          Status,
+          PackageCount,
+          Notes,
+          CreatedAt,
+          UpdatedAt
+        )
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderId,
+          INSERTED.PickingTaskId,
+          INSERTED.PackerUserId,
+          INSERTED.Status,
+          INSERTED.PackageCount,
+          INSERTED.AssignedAt,
+          INSERTED.StartedAt,
+          INSERTED.CompletedAt,
+          INSERTED.Notes,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        VALUES
+        (
+          @OrderId,
+          @PickingTaskId,
+          NULL,
+          'PENDING',
+          0,
+          @Notes,
+          SYSUTCDATETIME(),
+          SYSUTCDATETIME()
+        );
+      `);
+
+    const row = result.recordset[0];
+
+    if (!row) {
+      throw new Error("Failed to create packing task in transaction");
+    }
+
+    return row;
+  }
+
   async findAll(): Promise<PackingTaskRow[]> {
     const pool = await getDatabasePool();
 
@@ -178,33 +235,67 @@ export class PackingRepository {
 
   async start(id: number): Promise<PackingTaskRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .query<PackingTaskRow>(`
-        UPDATE dbo.PackingTasks
-        SET
-          Status = 'PACKING',
-          StartedAt = SYSUTCDATETIME(),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PickingTaskId,
-          INSERTED.PackerUserId,
-          INSERTED.Status,
-          INSERTED.PackageCount,
-          INSERTED.AssignedAt,
-          INSERTED.StartedAt,
-          INSERTED.CompletedAt,
-          INSERTED.Notes,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
-      `);
+    await transaction.begin();
 
-    return result.recordset[0] ?? null;
+    try {
+      const result = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .query<PackingTaskRow>(`
+          UPDATE dbo.PackingTasks
+          SET
+            Status = 'PACKING',
+            StartedAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PickingTaskId,
+            INSERTED.PackerUserId,
+            INSERTED.Status,
+            INSERTED.PackageCount,
+            INSERTED.AssignedAt,
+            INSERTED.StartedAt,
+            INSERTED.CompletedAt,
+            INSERTED.Notes,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND Status = 'ASSIGNED';
+        `);
+
+      const task = result.recordset[0];
+
+      if (!task) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, task.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'PACKING',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'PICKED';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          "Order must be in PICKED status before packing can start",
+        );
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async complete(
@@ -212,35 +303,69 @@ export class PackingRepository {
     notes?: string,
   ): Promise<PackingTaskRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .input("Notes", sql.NVarChar(1000), notes ?? null)
-      .query<PackingTaskRow>(`
-        UPDATE dbo.PackingTasks
-        SET
-          Status = 'PACKED',
-          CompletedAt = SYSUTCDATETIME(),
-          Notes = COALESCE(@Notes, Notes),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PickingTaskId,
-          INSERTED.PackerUserId,
-          INSERTED.Status,
-          INSERTED.PackageCount,
-          INSERTED.AssignedAt,
-          INSERTED.StartedAt,
-          INSERTED.CompletedAt,
-          INSERTED.Notes,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
-      `);
+    await transaction.begin();
 
-    return result.recordset[0] ?? null;
+    try {
+      const result = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .input("Notes", sql.NVarChar(1000), notes ?? null)
+        .query<PackingTaskRow>(`
+          UPDATE dbo.PackingTasks
+          SET
+            Status = 'PACKED',
+            CompletedAt = SYSUTCDATETIME(),
+            Notes = COALESCE(@Notes, Notes),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PickingTaskId,
+            INSERTED.PackerUserId,
+            INSERTED.Status,
+            INSERTED.PackageCount,
+            INSERTED.AssignedAt,
+            INSERTED.StartedAt,
+            INSERTED.CompletedAt,
+            INSERTED.Notes,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND Status = 'PACKING';
+        `);
+
+      const task = result.recordset[0];
+
+      if (!task) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, task.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'PACKED',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'PACKING';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          "Order must be in PACKING status before packing can be completed",
+        );
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async createPackage(
@@ -251,74 +376,132 @@ export class PackingRepository {
     weight: number | null,
   ): Promise<PackageRow> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("PackingTaskId", sql.Int, packingTaskId)
-      .input("OrderId", sql.Int, orderId)
-      .input("PackageNumber", sql.Int, packageNumber)
-      .input("TrackingCode", sql.NVarChar(100), trackingCode)
-      .input("Weight", sql.Decimal(18, 2), weight)
-      .query<PackageRow>(`
-        INSERT INTO dbo.Packages
-        (
-          PackingTaskId,
-          OrderId,
-          PackageNumber,
-          TrackingCode,
-          Weight,
-          Status,
-          PackedAt,
-          CreatedAt,
-          UpdatedAt
-        )
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.PackingTaskId,
-          INSERTED.OrderId,
-          INSERTED.PackageNumber,
-          INSERTED.TrackingCode,
-          INSERTED.Weight,
-          INSERTED.Status,
-          INSERTED.PackedAt,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        VALUES
-        (
-          @PackingTaskId,
-          @OrderId,
-          @PackageNumber,
-          @TrackingCode,
-          @Weight,
-          'CREATED',
-          NULL,
-          SYSUTCDATETIME(),
-          SYSUTCDATETIME()
-        );
-      `);
+    await transaction.begin();
 
-    const row = result.recordset[0];
+    try {
+      const taskResult = await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, packingTaskId)
+        .query<{ OrderId: number; Status: string }>(`
+          SELECT
+            OrderId,
+            Status
+          FROM dbo.PackingTasks WITH (UPDLOCK, HOLDLOCK)
+          WHERE Id = @PackingTaskId;
+        `);
 
-    if (!row) {
-      throw new Error("Failed to create package");
+      const task = taskResult.recordset[0];
+
+      if (!task) {
+        throw new Error("Packing task not found");
+      }
+
+      if (task.Status !== "PACKING") {
+        throw new Error("Packing task must be in PACKING status");
+      }
+
+      if (task.OrderId !== orderId) {
+        throw new Error("Packing task does not belong to the order");
+      }
+
+      const numberResult = await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, packingTaskId)
+        .query<{ NextPackageNumber: number }>(`
+          SELECT
+            ISNULL(MAX(PackageNumber), 0) + 1 AS NextPackageNumber
+          FROM dbo.Packages WITH (UPDLOCK, HOLDLOCK)
+          WHERE PackingTaskId = @PackingTaskId;
+        `);
+
+      const nextPackageNumber =
+        numberResult.recordset[0]?.NextPackageNumber ?? 1;
+
+      const finalPackageNumber =
+        packageNumber === nextPackageNumber
+          ? packageNumber
+          : nextPackageNumber;
+
+      const result = await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, packingTaskId)
+        .input("OrderId", sql.Int, orderId)
+        .input("PackageNumber", sql.Int, finalPackageNumber)
+        .input("TrackingCode", sql.NVarChar(100), trackingCode)
+        .input("Weight", sql.Decimal(18, 2), weight)
+        .query<PackageRow>(`
+          INSERT INTO dbo.Packages
+          (
+            PackingTaskId,
+            OrderId,
+            PackageNumber,
+            TrackingCode,
+            Weight,
+            Status,
+            PackedAt,
+            CreatedAt,
+            UpdatedAt
+          )
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.PackingTaskId,
+            INSERTED.OrderId,
+            INSERTED.PackageNumber,
+            INSERTED.TrackingCode,
+            INSERTED.Weight,
+            INSERTED.Status,
+            INSERTED.PackedAt,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          VALUES
+          (
+            @PackingTaskId,
+            @OrderId,
+            @PackageNumber,
+            @TrackingCode,
+            @Weight,
+            'CREATED',
+            NULL,
+            SYSUTCDATETIME(),
+            SYSUTCDATETIME()
+          );
+        `);
+
+      const row = result.recordset[0];
+
+      if (!row) {
+        throw new Error("Failed to create package");
+      }
+
+      const countResult = await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, packingTaskId)
+        .query<{ PackageCount: number }>(`
+          SELECT COUNT(*) AS PackageCount
+          FROM dbo.Packages
+          WHERE PackingTaskId = @PackingTaskId;
+        `);
+
+      const packageCount =
+        countResult.recordset[0]?.PackageCount ?? 0;
+
+      await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, packingTaskId)
+        .input("PackageCount", sql.Int, packageCount)
+        .query(`
+          UPDATE dbo.PackingTasks
+          SET
+            PackageCount = @PackageCount,
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @PackingTaskId
+            AND Status = 'PACKING';
+        `);
+
+      await transaction.commit();
+
+      return row;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    await pool
-      .request()
-      .input("PackingTaskId", sql.Int, packingTaskId)
-      .query(`
-        UPDATE dbo.PackingTasks
-        SET
-          PackageCount = (
-            SELECT COUNT(*)
-            FROM dbo.Packages
-            WHERE PackingTaskId = @PackingTaskId
-          ),
-          UpdatedAt = SYSUTCDATETIME()
-        WHERE Id = @PackingTaskId;
-      `);
-
-    return row;
   }
 
   async getPackageCount(packingTaskId: number): Promise<number> {
@@ -327,12 +510,13 @@ export class PackingRepository {
     const result = await pool
       .request()
       .input("PackingTaskId", sql.Int, packingTaskId)
-      .query<{ Count: number }>(`
-        SELECT COUNT(*) AS Count
+      .query<{ PackageCount: number }>(`
+        SELECT COUNT(*) AS PackageCount
         FROM dbo.Packages
         WHERE PackingTaskId = @PackingTaskId;
       `);
 
-    return result.recordset[0]?.Count ?? 0;
+    return result.recordset[0]?.PackageCount ?? 0;
   }
+
 }

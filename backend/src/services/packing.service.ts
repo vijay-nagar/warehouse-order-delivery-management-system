@@ -94,7 +94,7 @@ export class PackingService {
       task.OrderId,
       packageNumber,
       trackingCode,
-      weight ?? null,
+      weight ?? 0,
     );
   }
 

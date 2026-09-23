@@ -65,7 +65,22 @@ export class UserRepository {
     };
   }
 
-    async hasPermission(
+    async isActive(userId: number): Promise<boolean> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query<{ IsActive: boolean }>(`
+        SELECT IsActive
+        FROM dbo.Users
+        WHERE Id = @userId;
+      `);
+
+    return result.recordset[0]?.IsActive === true;
+  }
+
+  async hasPermission(
     userId: number,
     permissionName: string,
   ): Promise<boolean> {

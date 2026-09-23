@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { PackingRepository } from "../repositories/packing.repository.js";
+import { sendSafeErrorResponse } from "../utils/error-response.js";
 import { PackingService } from "../services/packing.service.js";
 
 const packingService = new PackingService(new PackingRepository());
@@ -18,10 +19,7 @@ export async function createPackingTask(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to create packing task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to create packing task", 400);
   }
 }
 
@@ -34,10 +32,7 @@ export async function getPackingTasks(_req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to get packing tasks",
-    });
+    sendSafeErrorResponse(res, error, "Failed to get packing tasks", 500);
   }
 }
 
@@ -59,10 +54,7 @@ export async function getPackingTaskById(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to get packing task",
-    });
+    return sendSafeErrorResponse(res, error, "Failed to get packing task", 400);
   }
 }
 
@@ -81,10 +73,7 @@ export async function assignPackingTask(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to assign packing task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to assign packing task", 400);
   }
 }
 
@@ -100,10 +89,7 @@ export async function startPackingTask(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to start packing task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to start packing task", 400);
   }
 }
 
@@ -122,10 +108,7 @@ export async function createPackage(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to create package",
-    });
+    sendSafeErrorResponse(res, error, "Failed to create package", 400);
   }
 }
 
@@ -144,9 +127,6 @@ export async function completePackingTask(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to complete packing task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to complete packing task", 400);
   }
 }

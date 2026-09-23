@@ -1,6 +1,7 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import { PackingRepository } from "./packing.repository.js";
 
 export interface PickingTaskRow {
   Id: number;
@@ -276,7 +277,8 @@ export class PickingRepository {
           INSERTED.Notes,
           INSERTED.CreatedAt,
           INSERTED.UpdatedAt
-        WHERE Id = @Id;
+        WHERE Id = @Id
+          AND Status = 'PENDING';
 
       `);
 
@@ -285,32 +287,66 @@ export class PickingRepository {
 
   async start(id: number): Promise<PickingTaskRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .query<PickingTaskRow>(`
-        UPDATE dbo.PickingTasks
-        SET
-          Status = 'PICKING',
-          StartedAt = SYSUTCDATETIME(),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PickerUserId,
-          INSERTED.Status,
-          INSERTED.AssignedAt,
-          INSERTED.StartedAt,
-          INSERTED.CompletedAt,
-          INSERTED.Notes,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
+    await transaction.begin();
 
-      `);
+    try {
+      const taskResult = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .query<PickingTaskRow>(`
+          UPDATE dbo.PickingTasks
+          SET
+            Status = 'PICKING',
+            StartedAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PickerUserId,
+            INSERTED.Status,
+            INSERTED.AssignedAt,
+            INSERTED.StartedAt,
+            INSERTED.CompletedAt,
+            INSERTED.Notes,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND Status = 'ASSIGNED';
 
-    return result.recordset[0] ?? null;
+        `);
+
+      const task = taskResult.recordset[0];
+
+      if (!task) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, task.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'PICKING',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'STOCK_RESERVED';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          "Order must be in STOCK_RESERVED status before picking can start",
+        );
+      }
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async updateItem(
@@ -326,12 +362,12 @@ export class PickingRepository {
       .input("ItemId", sql.Int, itemId)
       .input("PickedQuantity", sql.Int, pickedQuantity)
       .query(`
-        UPDATE dbo.PickingTaskItems
+        UPDATE item
         SET
           PickedQuantity = @PickedQuantity,
           Status =
             CASE
-              WHEN @PickedQuantity >= RequiredQuantity THEN 'PICKED'
+              WHEN @PickedQuantity = RequiredQuantity THEN 'PICKED'
               WHEN @PickedQuantity > 0 THEN 'PARTIAL'
               ELSE 'PENDING'
             END,
@@ -345,8 +381,13 @@ export class PickingRepository {
           INSERTED.Status,
           INSERTED.CreatedAt,
           INSERTED.UpdatedAt
-        WHERE Id = @ItemId
-          AND PickingTaskId = @TaskId;
+        FROM dbo.PickingTaskItems AS item
+        INNER JOIN dbo.PickingTasks AS task
+          ON task.Id = item.PickingTaskId
+        WHERE item.Id = @ItemId
+          AND item.PickingTaskId = @TaskId
+          AND task.Status = 'PICKING'
+          AND @PickedQuantity <= item.RequiredQuantity;
       `);
 
     return result.recordset[0] ?? null;
@@ -357,36 +398,131 @@ export class PickingRepository {
     notes?: string,
   ): Promise<PickingTaskRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const request = pool
-      .request()
-      .input("Id", sql.Int, id);
+    await transaction.begin();
 
-    if (notes !== undefined) {
-      request.input("Notes", sql.NVarChar(1000), notes);
+    try {
+      const request = new sql.Request(transaction)
+        .input("Id", sql.Int, id);
+
+      if (notes !== undefined) {
+        request.input("Notes", sql.NVarChar(1000), notes);
+      }
+
+      const result = await request.query<PickingTaskRow>(`
+        UPDATE dbo.PickingTasks
+        SET
+          Status = 'PICKED',
+          CompletedAt = SYSUTCDATETIME(),
+          UpdatedAt = SYSUTCDATETIME()
+          ${notes !== undefined ? ", Notes = @Notes" : ""}
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderId,
+          INSERTED.PickerUserId,
+          INSERTED.Status,
+          INSERTED.AssignedAt,
+          INSERTED.StartedAt,
+          INSERTED.CompletedAt,
+          INSERTED.Notes,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        WHERE Id = @Id
+          AND Status = 'PICKING';
+      `);
+
+      const task = result.recordset[0];
+
+      if (!task) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const reservationRequest = new sql.Request(transaction)
+        .input("OrderId", sql.Int, task.OrderId);
+
+      const reservationResult = await reservationRequest.query(`
+        SELECT
+          Id,
+          InventoryId,
+          Quantity
+        FROM dbo.OrderInventoryReservations WITH (UPDLOCK, ROWLOCK)
+        WHERE OrderId = @OrderId
+          AND Status = 'RESERVED';
+      `);
+
+      for (const reservation of reservationResult.recordset) {
+        const inventoryRequest = new sql.Request(transaction)
+          .input("InventoryId", sql.Int, reservation.InventoryId)
+          .input("Quantity", sql.Int, reservation.Quantity);
+
+        const inventoryResult = await inventoryRequest.query(`
+          UPDATE dbo.Inventory
+          SET
+            ReservedQuantity = ReservedQuantity - @Quantity,
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @InventoryId
+            AND ReservedQuantity >= @Quantity;
+        `);
+
+        if (inventoryResult.rowsAffected[0] !== 1) {
+          throw new Error(
+            `Inventory ${reservation.InventoryId} cannot consume reserved quantity ${reservation.Quantity}.`,
+          );
+        }
+
+        const consumeRequest = new sql.Request(transaction)
+          .input("ReservationId", sql.Int, reservation.Id);
+
+        const consumeResult = await consumeRequest.query(`
+          UPDATE dbo.OrderInventoryReservations
+          SET
+            Status = 'CONSUMED',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @ReservationId
+            AND Status = 'RESERVED';
+        `);
+
+        if (consumeResult.rowsAffected[0] !== 1) {
+          throw new Error(
+            `Reservation ${reservation.Id} could not be marked as CONSUMED.`,
+          );
+        }
+      }
+
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, task.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'PICKED',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'PICKING';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          `Order ${task.OrderId} could not be moved from PICKING to PICKED.`,
+        );
+      }
+
+      const packingRepository = new PackingRepository();
+
+      await packingRepository.createTaskInTransaction(
+        transaction,
+        task.OrderId,
+        task.Id,
+        "Automatically created after picking completion",
+      );
+
+      await transaction.commit();
+
+      return task;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-
-    const result = await request.query<PickingTaskRow>(`
-      UPDATE dbo.PickingTasks
-      SET
-        Status = 'PICKED',
-        CompletedAt = SYSUTCDATETIME(),
-        UpdatedAt = SYSUTCDATETIME()
-        ${notes !== undefined ? ", Notes = @Notes" : ""}
-      OUTPUT
-        INSERTED.Id,
-        INSERTED.OrderId,
-        INSERTED.PickerUserId,
-        INSERTED.Status,
-        INSERTED.AssignedAt,
-        INSERTED.StartedAt,
-        INSERTED.CompletedAt,
-        INSERTED.Notes,
-        INSERTED.CreatedAt,
-        INSERTED.UpdatedAt
-      WHERE Id = @Id;
-    `);
-
-    return result.recordset[0] ?? null;
   }
 }

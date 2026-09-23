@@ -237,7 +237,8 @@ export class DeliveryRepository {
           INSERTED.ReturnReason,
           INSERTED.CreatedAt,
           INSERTED.UpdatedAt
-        WHERE Id = @Id;
+        WHERE Id = @Id
+          AND Status = 'PENDING';
       `);
 
     return result.recordset[0] ?? null;
@@ -248,11 +249,21 @@ export class DeliveryRepository {
   }
 
   async outForDelivery(id: number): Promise<DeliveryRow | null> {
-    return this.updateStatus(id, "OUT_FOR_DELIVERY", "OutForDeliveryAt");
+    return this.updateStatus(
+      id,
+      "OUT_FOR_DELIVERY",
+      "OutForDeliveryAt",
+      "OUT_FOR_DELIVERY",
+    );
   }
 
   async deliver(id: number): Promise<DeliveryRow | null> {
-    return this.updateStatus(id, "DELIVERED", "DeliveredAt");
+    return this.updateStatus(
+      id,
+      "DELIVERED",
+      "DeliveredAt",
+      "DELIVERED",
+    );
   }
 
   async fail(
@@ -260,54 +271,60 @@ export class DeliveryRepository {
     reason: string,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .input("FailureReason", sql.NVarChar(1000), reason || "")
-      .query<DeliveryRow>(`
-        UPDATE dbo.Deliveries
-        SET
-          Status = 'FAILED',
-          FailureReason = @FailureReason,
-          FailedAt = SYSUTCDATETIME(),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PackageId,
-          INSERTED.DeliveryBoyUserId,
-          INSERTED.Status,
-          INSERTED.AssignedAt,
-          INSERTED.PickedUpAt,
-          INSERTED.OutForDeliveryAt,
-          INSERTED.DeliveredAt,
-          INSERTED.FailedAt,
-          INSERTED.ReturnedAt,
-          INSERTED.FailureReason,
-          INSERTED.ReturnReason,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
-      `);
+    await transaction.begin();
 
-    const row = result.recordset[0] ?? null;
+    try {
+      const result = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .input("FailureReason", sql.NVarChar(1000), reason || "")
+        .query<DeliveryRow>(`
+          UPDATE dbo.Deliveries
+          SET
+            Status = 'FAILED',
+            FailureReason = @FailureReason,
+            FailedAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PackageId,
+            INSERTED.DeliveryBoyUserId,
+            INSERTED.Status,
+            INSERTED.AssignedAt,
+            INSERTED.PickedUpAt,
+            INSERTED.OutForDeliveryAt,
+            INSERTED.DeliveredAt,
+            INSERTED.FailedAt,
+            INSERTED.ReturnedAt,
+            INSERTED.FailureReason,
+            INSERTED.ReturnReason,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND Status = 'OUT_FOR_DELIVERY';
+        `);
 
-    if (row) {
-      const attemptResult = await pool
-        .request()
+      const row = result.recordset[0];
+
+      if (!row) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const attemptResult = await new sql.Request(transaction)
         .input("DeliveryId", sql.Int, id)
         .query<{ AttemptNumber: number }>(`
           SELECT ISNULL(MAX(AttemptNumber), 0) + 1 AS AttemptNumber
-          FROM dbo.DeliveryAttempts
+          FROM dbo.DeliveryAttempts WITH (UPDLOCK, HOLDLOCK)
           WHERE DeliveryId = @DeliveryId;
         `);
 
       const attemptNumber =
         attemptResult.recordset[0]?.AttemptNumber ?? 1;
 
-      await pool
-        .request()
+      await new sql.Request(transaction)
         .input("DeliveryId", sql.Int, id)
         .input("AttemptNumber", sql.Int, attemptNumber)
         .input("Status", sql.NVarChar(50), "FAILED")
@@ -330,9 +347,31 @@ export class DeliveryRepository {
             SYSUTCDATETIME()
           );
         `);
-    }
 
-    return row;
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, row.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'FAILED',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'OUT_FOR_DELIVERY';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          "Order must be in OUT_FOR_DELIVERY status before delivery can fail",
+        );
+      }
+
+      await transaction.commit();
+
+      return row;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async returnDelivery(
@@ -340,38 +379,72 @@ export class DeliveryRepository {
     reason: string,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .input("ReturnReason", sql.NVarChar(1000), reason || "")
-      .query<DeliveryRow>(`
-        UPDATE dbo.Deliveries
-        SET
-          Status = 'RETURNED',
-          ReturnReason = @ReturnReason,
-          ReturnedAt = SYSUTCDATETIME(),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PackageId,
-          INSERTED.DeliveryBoyUserId,
-          INSERTED.Status,
-          INSERTED.AssignedAt,
-          INSERTED.PickedUpAt,
-          INSERTED.OutForDeliveryAt,
-          INSERTED.DeliveredAt,
-          INSERTED.FailedAt,
-          INSERTED.ReturnedAt,
-          INSERTED.FailureReason,
-          INSERTED.ReturnReason,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
-      `);
+    await transaction.begin();
 
-    return result.recordset[0] ?? null;
+    try {
+      const result = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .input("ReturnReason", sql.NVarChar(1000), reason || "")
+        .query<DeliveryRow>(`
+          UPDATE dbo.Deliveries
+          SET
+            Status = 'RETURNED',
+            ReturnReason = @ReturnReason,
+            ReturnedAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PackageId,
+            INSERTED.DeliveryBoyUserId,
+            INSERTED.Status,
+            INSERTED.AssignedAt,
+            INSERTED.PickedUpAt,
+            INSERTED.OutForDeliveryAt,
+            INSERTED.DeliveredAt,
+            INSERTED.FailedAt,
+            INSERTED.ReturnedAt,
+            INSERTED.FailureReason,
+            INSERTED.ReturnReason,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND Status = 'FAILED';
+        `);
+
+      const row = result.recordset[0];
+
+      if (!row) {
+        await transaction.rollback();
+        return null;
+      }
+
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, row.OrderId)
+        .query(`
+          UPDATE dbo.Orders
+          SET
+            Status = 'RETURNED',
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @OrderId
+            AND Status = 'FAILED';
+        `);
+
+      if (orderResult.rowsAffected[0] !== 1) {
+        throw new Error(
+          "Order must be in FAILED status before delivery can be returned",
+        );
+      }
+
+      await transaction.commit();
+
+      return row;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async addTracking(
@@ -435,37 +508,104 @@ export class DeliveryRepository {
       | "PickedUpAt"
       | "OutForDeliveryAt"
       | "DeliveredAt",
+    orderStatus?: string,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
+    const transaction = new sql.Transaction(pool);
 
-    const result = await pool
-      .request()
-      .input("Id", sql.Int, id)
-      .query<DeliveryRow>(`
-        UPDATE dbo.Deliveries
-        SET
-          Status = '${status}',
-          ${timestampColumn} = SYSUTCDATETIME(),
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderId,
-          INSERTED.PackageId,
-          INSERTED.DeliveryBoyUserId,
-          INSERTED.Status,
-          INSERTED.AssignedAt,
-          INSERTED.PickedUpAt,
-          INSERTED.OutForDeliveryAt,
-          INSERTED.DeliveredAt,
-          INSERTED.FailedAt,
-          INSERTED.ReturnedAt,
-          INSERTED.FailureReason,
-          INSERTED.ReturnReason,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @Id;
-      `);
+    await transaction.begin();
 
-    return result.recordset[0] ?? null;
+    try {
+      const expectedDeliveryStatus =
+        status === "PICKED_UP"
+          ? "ASSIGNED"
+          : status === "OUT_FOR_DELIVERY"
+            ? "PICKED_UP"
+            : status === "DELIVERED"
+              ? "OUT_FOR_DELIVERY"
+              : undefined;
+
+      const result = await new sql.Request(transaction)
+        .input("Id", sql.Int, id)
+        .input(
+          "ExpectedDeliveryStatus",
+          sql.NVarChar(50),
+          expectedDeliveryStatus ?? "",
+        )
+        .query<DeliveryRow>(`
+          UPDATE dbo.Deliveries
+          SET
+            Status = '${status}',
+            ${timestampColumn} = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.Id,
+            INSERTED.OrderId,
+            INSERTED.PackageId,
+            INSERTED.DeliveryBoyUserId,
+            INSERTED.Status,
+            INSERTED.AssignedAt,
+            INSERTED.PickedUpAt,
+            INSERTED.OutForDeliveryAt,
+            INSERTED.DeliveredAt,
+            INSERTED.FailedAt,
+            INSERTED.ReturnedAt,
+            INSERTED.FailureReason,
+            INSERTED.ReturnReason,
+            INSERTED.CreatedAt,
+            INSERTED.UpdatedAt
+          WHERE Id = @Id
+            AND (
+              @ExpectedDeliveryStatus = ''
+              OR Status = @ExpectedDeliveryStatus
+            );
+        `);
+
+      const row = result.recordset[0];
+
+      if (!row) {
+        await transaction.rollback();
+        return null;
+      }
+
+      if (orderStatus) {
+        const expectedOrderStatus =
+          status === "OUT_FOR_DELIVERY"
+            ? "PACKED"
+            : status === "DELIVERED"
+              ? "OUT_FOR_DELIVERY"
+              : undefined;
+
+        const orderResult = await new sql.Request(transaction)
+          .input("OrderId", sql.Int, row.OrderId)
+          .input("OrderStatus", sql.NVarChar(50), orderStatus)
+          .input(
+            "ExpectedOrderStatus",
+            sql.NVarChar(50),
+            expectedOrderStatus ?? "",
+          )
+          .query(`
+            UPDATE dbo.Orders
+            SET
+              Status = @OrderStatus,
+              UpdatedAt = SYSUTCDATETIME()
+            WHERE Id = @OrderId
+              AND (@ExpectedOrderStatus = '' OR Status = @ExpectedOrderStatus);
+          `);
+
+        if (orderResult.rowsAffected[0] !== 1) {
+          throw new Error(
+            "Order status transition failed during delivery update",
+          );
+        }
+      }
+
+      await transaction.commit();
+
+      return row;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 }

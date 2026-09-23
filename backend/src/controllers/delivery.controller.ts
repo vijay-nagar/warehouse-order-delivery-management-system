@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { DeliveryRepository } from "../repositories/delivery.repository.js";
+import { sendSafeErrorResponse } from "../utils/error-response.js";
 import { DeliveryService } from "../services/delivery.service.js";
 
 const deliveryService = new DeliveryService(new DeliveryRepository());
@@ -17,10 +18,7 @@ export async function createDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to create delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to create delivery", 400);
   }
 }
 
@@ -33,10 +31,7 @@ export async function getDeliveries(_req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to get deliveries",
-    });
+    sendSafeErrorResponse(res, error, "Failed to get deliveries", 500);
   }
 }
 
@@ -57,10 +52,7 @@ export async function getDeliveryById(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to get delivery",
-    });
+    return sendSafeErrorResponse(res, error, "Failed to get delivery", 400);
   }
 }
 
@@ -77,10 +69,7 @@ export async function assignDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to assign delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to assign delivery", 400);
   }
 }
 
@@ -94,10 +83,7 @@ export async function pickupDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to pickup delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to pickup delivery", 400);
   }
 }
 
@@ -113,10 +99,7 @@ export async function outForDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to update delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to update delivery", 400);
   }
 }
 
@@ -130,10 +113,7 @@ export async function deliverDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to complete delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to complete delivery", 400);
   }
 }
 
@@ -150,10 +130,7 @@ export async function failDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to mark delivery failed",
-    });
+    sendSafeErrorResponse(res, error, "Failed to mark delivery failed", 400);
   }
 }
 
@@ -170,10 +147,7 @@ export async function returnDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to return delivery",
-    });
+    sendSafeErrorResponse(res, error, "Failed to return delivery", 400);
   }
 }
 
@@ -192,9 +166,6 @@ export async function addTracking(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to add tracking",
-    });
+    sendSafeErrorResponse(res, error, "Failed to add tracking", 400);
   }
 }

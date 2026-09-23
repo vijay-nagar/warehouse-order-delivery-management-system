@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { verifyAccessToken } from "../utils/jwt.js";
+import { UserRepository } from "../repositories/user.repository.js";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,11 +11,13 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-export const authenticate = (
+const userRepository = new UserRepository();
+
+export const authenticate = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const authorization = req.headers.authorization;
 
   if (!authorization || !authorization.startsWith("Bearer ")) {
@@ -37,6 +40,16 @@ export const authenticate = (
 
   try {
     const payload = verifyAccessToken(token);
+
+    const userIsActive = await userRepository.isActive(payload.userId);
+
+    if (!userIsActive) {
+      res.status(401).json({
+        success: false,
+        message: "User account is inactive",
+      });
+      return;
+    }
 
     req.user = {
       userId: payload.userId,

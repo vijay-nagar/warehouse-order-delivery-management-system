@@ -109,11 +109,10 @@ export class DeliveryService {
       throw new Error("Delivery not found");
     }
 
-    if (
-      delivery.Status !== "OUT_FOR_DELIVERY" &&
-      delivery.Status !== "PICKED_UP"
-    ) {
-      throw new Error("Delivery cannot be marked as failed in its current status");
+    if (delivery.Status !== "OUT_FOR_DELIVERY") {
+      throw new Error(
+        "Delivery must be OUT_FOR_DELIVERY before it can be marked as failed",
+      );
     }
 
     const result = await this.repository.fail(id, reason);
