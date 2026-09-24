@@ -5,6 +5,7 @@ import type {
 
 import { OrderRepository } from "../repositories/order.repository.js";
 import { InventoryReservationRepository } from "../repositories/inventory-reservation.repository.js";
+import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
 
 export class OrderService {
   constructor(
@@ -14,7 +15,35 @@ export class OrderService {
   ) {}
 
   async createOrder(input: CreateOrderInput): Promise<Order> {
-    return this.orderRepository.create(input);
+    const order = await this.orderRepository.create(input);
+
+    await rabbitMQService.publish("ORDER_CREATED", {
+      event: "ORDER_CREATED",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      warehouseId: order.warehouseId,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      createdAt: order.createdAt,
+    });
+
+    await rabbitMQService.publish("ORDER_CREATED_NOTIFICATION", {
+      event: "ORDER_CREATED",
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      warehouseId: order.warehouseId,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      createdAt: order.createdAt,
+    });
+
+    
+
+    return order;
+
+    
   }
 
   async getOrders(): Promise<Order[]> {

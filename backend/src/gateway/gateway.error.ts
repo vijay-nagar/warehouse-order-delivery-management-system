@@ -1,15 +1,38 @@
-import type { Request, Response, NextFunction } from "express";
+import type {
+  ErrorRequestHandler,
+} from "express";
 
-export const gatewayErrorHandler = (
-  err: Error,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
+export const gatewayErrorHandler: ErrorRequestHandler = (
+  err,
+  req,
+  res,
+  _next,
 ) => {
-  console.error("[API GATEWAY ERROR]", err);
+  const requestId =
+    res.locals.requestId ?? "unknown";
+
+  console.error("[API GATEWAY ERROR]", {
+    requestId,
+    method: req.method,
+    path: req.originalUrl,
+    error:
+      err instanceof Error
+        ? err.message
+        : String(err),
+    stack:
+      err instanceof Error
+        ? err.stack
+        : undefined,
+  });
+
+  if (res.headersSent) {
+    return;
+  }
 
   res.status(500).json({
     success: false,
-    message: "API Gateway error",
+    message: "Internal server error",
+    code: "INTERNAL_SERVER_ERROR",
+    requestId,
   });
 };

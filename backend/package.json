@@ -15,6 +15,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "amqplib": "^2.0.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -23,15 +24,20 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mssql": "^12.7.2",
+    "node-cron": "^4.6.0",
+    "rate-limit-redis": "^6.0.1",
+    "redis": "^6.2.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.8",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/mssql": "^12.3.0",
     "@types/node": "^26.5.1",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }

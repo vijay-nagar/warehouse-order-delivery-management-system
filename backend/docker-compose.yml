@@ -13,8 +13,16 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
     ports:
       - "3001:3000"
+    depends_on:
+      - redis
 
   backend-2:
     build: .
@@ -30,8 +38,16 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
     ports:
       - "3002:3000"
+    depends_on:
+      - redis
 
   backend-3:
     build: .
@@ -47,5 +63,101 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
     ports:
       - "3003:3000"
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: warehouse-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: warehouse-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  order-worker:
+    build: .
+    container_name: warehouse-order-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      - redis
+      - rabbitmq
+    command: ["node", "dist/workers/order-created.worker.js"]
+
+  notification-worker:
+    build: .
+    container_name: warehouse-notification-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      - redis
+      - rabbitmq
+    command: ["node", "dist/workers/notification.worker.js"]
+
+  background-job-runner:
+    build: .
+    container_name: warehouse-background-job-runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DB_SERVER: host.docker.internal
+      DB_PORT: 1434
+      DB_DATABASE: WarehouseOrderDelivery
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      - redis
+      - rabbitmq
+    command: ["node", "dist/jobs/background-job-runner.js"]
