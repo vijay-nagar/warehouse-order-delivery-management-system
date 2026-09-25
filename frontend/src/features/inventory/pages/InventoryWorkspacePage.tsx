@@ -1,29 +1,31 @@
 import { useCallback, useState } from "react";
 import { Dialog } from "../../../shared/components/overlay/Dialog";
 import { EmptyState, ErrorState, LoadingState } from "../../../shared/components/feedback/AsyncStates";
+import { Pagination } from "../../../shared/components/table/Pagination";
 import { useToast } from "../../../app/providers/ToastProvider";
 import { useAsyncRequest } from "../../../shared/hooks/useAsyncRequest";
-import { useResourceList } from "../../../shared/hooks/useResourceList";
+import { usePaginatedResourceList } from "../../../shared/hooks/usePaginatedResourceList";
 import { toApiError } from "../../../shared/api/errors";
 import { inventoryApi, inventoryTransactionsApi } from "../api/inventoryApi";
 import type { ResourceRow } from "../../../shared/types/api";
+import type { PaginatedResult, PaginationParams } from "../../../shared/types/pagination";
 
 type TransactionKind = "stockIn" | "stockOut" | "adjustment";
 
 export default function InventoryWorkspacePage() {
   const [binIdFilter, setBinIdFilter] = useState("");
-  const loadInventory = useCallback(() => {
+  const loadInventory = useCallback((params?: PaginationParams) => {
     const binId = Number(binIdFilter);
-    return inventoryApi.list(
-      binIdFilter.trim() && Number.isInteger(binId) && binId > 0
-        ? { binId }
-        : undefined,
-    );
+    return inventoryApi.list({
+      ...params,
+      ...(binIdFilter.trim() && Number.isInteger(binId) && binId > 0 ? { binId } : {}),
+    });
   }, [binIdFilter]);
-  const { rows, loading, error, reload } = useResourceList(loadInventory);
+  const { rows, loading, error, reload, page, pageSize, setPage, setPageSize, pagination } =
+    usePaginatedResourceList(loadInventory);
   const mutation = useAsyncRequest<ResourceRow>();
   const reservation = useAsyncRequest<ResourceRow[]>();
-  const historyRequest = useAsyncRequest<ResourceRow[]>();
+  const historyRequest = useAsyncRequest<PaginatedResult<ResourceRow>>();
   const { notify } = useToast();
   const [selected, setSelected] = useState<ResourceRow | null>(null);
   const [operation, setOperation] = useState<TransactionKind | null>(null);
@@ -59,7 +61,10 @@ export default function InventoryWorkspacePage() {
   };
   const loadHistory = async (row: ResourceRow) => {
     setSelected(row); setHistory(null);
-    try { setHistory(await historyRequest.execute(() => inventoryTransactionsApi.history(inventoryId(row)))); }
+    try {
+      const result = await historyRequest.execute(() => inventoryTransactionsApi.history(inventoryId(row), { pageSize: 50 }));
+      setHistory(result?.data ?? null);
+    }
     catch (reason) { notify(toApiError(reason).message); }
   };
 
@@ -75,5 +80,6 @@ export default function InventoryWorkspacePage() {
     </Dialog>
     <Dialog open={selected !== null && history !== null} title="Inventory transaction history" onClose={() => { setSelected(null); setHistory(null); }}><pre className="record-details">{JSON.stringify(history, null, 2)}</pre></Dialog>
     {historyRequest.loading && <LoadingState label="Loading transaction history" />}
+    <Pagination page={page} pageCount={pagination?.totalPages ?? 1} totalRecords={pagination?.totalRecords} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
   </main>;
 }

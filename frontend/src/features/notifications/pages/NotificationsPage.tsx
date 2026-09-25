@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { notificationsApi } from "../api/notificationsApi";
 import { toApiError } from "../../../shared/api/errors";
+import { Pagination } from "../../../shared/components/table/Pagination";
+import { usePaginatedResourceList } from "../../../shared/hooks/usePaginatedResourceList";
+import type { ResourceRow } from "../../../shared/types/api";
 
 interface Notification {
   id: number;
@@ -13,40 +16,33 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
   const [markingId, setMarkingId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const {
+    rows,
+    loading,
+    page,
+    pageSize,
+    pagination,
+    setPage,
+    setPageSize,
+    reload,
+  } = usePaginatedResourceList<ResourceRow>(notificationsApi.mine);
 
-      const response = await notificationsApi.mine();
-      setNotifications(response as unknown as Notification[]);
-    } catch (requestError) {
-      setError(toApiError(requestError).message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const notifications = rows as unknown as Notification[];
 
   const markAsRead = async (id: number) => {
     try {
       setMarkingId(id);
       await notificationsApi.markRead(id);
-      await loadNotifications();
+      await reload();
     } catch (requestError) {
       setError(toApiError(requestError).message);
     } finally {
       setMarkingId(null);
     }
   };
-
-  useEffect(() => {
-    loadNotifications();
-  }, []);
 
   return (
     <div className="module-page">
@@ -58,7 +54,7 @@ export default function NotificationsPage() {
 
         <button
           className="module-refresh-button"
-          onClick={loadNotifications}
+          onClick={() => void reload()}
           disabled={loading}
         >
           Refresh
@@ -135,6 +131,15 @@ export default function NotificationsPage() {
             </table>
           </div>
         )}
+
+        <Pagination
+          page={page}
+          pageCount={pagination?.totalPages ?? 1}
+          totalRecords={pagination?.totalRecords}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   );
