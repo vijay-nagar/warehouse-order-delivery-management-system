@@ -50,6 +50,27 @@ export const createPickingTask = async (
   }
 };
 
+export const getPickingStatusSummary = async (
+  _req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const summary = await pickingService.getStatusSummary();
+
+    res.status(200).json({
+      success: true,
+      message: "Picking status summary fetched successfully",
+      data: summary,
+    });
+  } catch (error) {
+    console.error("Get picking status summary error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch picking status summary",
+    });
+  }
+};
+
 export const getPickingTasks = async (
   req: Request,
   res: Response,

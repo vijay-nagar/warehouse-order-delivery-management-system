@@ -197,6 +197,23 @@ export class PickingRepository {
       `);
   }
 
+  async getStatusSummary(): Promise<Record<string, number>> {
+    const pool = await getDatabasePool();
+
+    const result = await pool.request().query<{ Status: string; TotalCount: number }>(`
+      SELECT
+        Status,
+        COUNT(*) AS TotalCount
+      FROM dbo.PickingTasks
+      GROUP BY Status;
+    `);
+
+    return result.recordset.reduce<Record<string, number>>((summary, row) => {
+      summary[row.Status] = row.TotalCount;
+      return summary;
+    }, {});
+  }
+
   async findAll(
     pagination: PaginationRequest,
     filters?: { status?: string },

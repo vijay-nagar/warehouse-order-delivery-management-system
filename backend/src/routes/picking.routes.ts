@@ -7,6 +7,7 @@ import {
   createPickingTask,
   getPickingTaskById,
   getPickingTasks,
+  getPickingStatusSummary,
   startPickingTask,
 } from "../controllers/picking.controller.js";
 
@@ -29,6 +30,12 @@ router.get(
   "/",
   requirePermission("PICKING_VIEW"),
   getPickingTasks,
+);
+
+router.get(
+  "/summary",
+  requirePermission("PICKING_VIEW"),
+  getPickingStatusSummary,
 );
 
 router.get(

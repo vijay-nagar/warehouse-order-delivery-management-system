@@ -46,6 +46,10 @@ export class PickingService {
     return this.getTaskById(taskId);
   }
 
+  async getStatusSummary(): Promise<Record<string, number>> {
+    return this.repository.getStatusSummary();
+  }
+
   async getTasks(pagination: PaginationRequest, filters?: { status?: string }) {
     const result = await this.repository.findAll(pagination, filters);
 
