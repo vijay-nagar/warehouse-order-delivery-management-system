@@ -5,6 +5,7 @@ import { PickingRepository } from "../repositories/picking.repository.js";
 import { PickingService } from "../services/picking.service.js";
 import { HttpError } from "../utils/http-error.js";
 import { sendSafeErrorResponse } from "../utils/error-response.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 import {
   assignPickingTaskSchema,
   completePickingTaskSchema,
@@ -50,16 +51,22 @@ export const createPickingTask = async (
 };
 
 export const getPickingTasks = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const tasks = await pickingService.getTasks();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
+    const tasks = await pickingService.getTasks(pagination);
 
     res.status(200).json({
       success: true,
       message: "Picking tasks fetched successfully",
-      data: tasks,
+      data: tasks.items,
+      pagination: toPaginationMeta(tasks),
     });
   } catch (error) {
     console.error("Get picking tasks error:", error);

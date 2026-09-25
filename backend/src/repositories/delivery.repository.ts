@@ -3,7 +3,15 @@ import { getDatabasePool } from "../config/database.js";
 import { recordStatusChange } from "../services/order-status.service.js";
 import { isValidTransition } from "../domain/order/order-transitions.js";
 import { insertInventoryTransactionInTransaction } from "./inventory-transaction.repository.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 import type { OrderStatus } from "../domain/order/order-status.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export interface DeliveryRow {
   Id: number;
@@ -134,10 +142,32 @@ export class DeliveryRepository {
     return result.recordset;
   }
 
-  async findAll(): Promise<DeliveryRow[]> {
+  async findAll(
+    pagination: PaginationRequest,
+    filters?: { status?: string },
+  ): Promise<PaginationResult<DeliveryRow>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const result = await pool.request().query<DeliveryRow>(`
+    const whereClause = filters?.status ? "WHERE Status = @Status" : "";
+
+    const countRequest = pool.request();
+    if (filters?.status) countRequest.input("Status", sql.NVarChar(30), filters.status);
+
+    const countResult = await countRequest.query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount FROM dbo.Deliveries ${whereClause};
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const listRequest = pool
+      .request()
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize);
+    if (filters?.status) listRequest.input("Status", sql.NVarChar(30), filters.status);
+
+    const result = await listRequest.query<DeliveryRow>(`
       SELECT
         Id,
         OrderId,
@@ -155,20 +185,44 @@ export class DeliveryRepository {
         CreatedAt,
         UpdatedAt
       FROM dbo.Deliveries
-      ORDER BY Id DESC;
+      ${whereClause}
+      ORDER BY Id DESC
+      OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
     `);
 
-    return result.recordset;
+    return {
+      items: result.recordset,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
-    async findByDeliveryBoyUserId(
+  async findByDeliveryBoyUserId(
     deliveryBoyUserId: number,
-  ): Promise<DeliveryRow[]> {
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<DeliveryRow>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
+
+    const countResult = await pool
+      .request()
+      .input("DeliveryBoyUserId", sql.Int, deliveryBoyUserId)
+      .query<{ TotalCount: number }>(`
+        SELECT COUNT(*) AS TotalCount
+        FROM dbo.Deliveries
+        WHERE DeliveryBoyUserId = @DeliveryBoyUserId;
+      `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
 
     const result = await pool
       .request()
       .input("DeliveryBoyUserId", sql.Int, deliveryBoyUserId)
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize)
       .query<DeliveryRow>(`
         SELECT
           Id,
@@ -188,10 +242,17 @@ export class DeliveryRepository {
           UpdatedAt
         FROM dbo.Deliveries
         WHERE DeliveryBoyUserId = @DeliveryBoyUserId
-        ORDER BY Id DESC;
+        ORDER BY Id DESC
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
       `);
 
-    return result.recordset;
+    return {
+      items: result.recordset,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async create(

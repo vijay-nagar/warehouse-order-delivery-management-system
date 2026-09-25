@@ -10,6 +10,7 @@ import {
   returnSchema,
   trackingSchema,
 } from "../validators/delivery.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 
@@ -55,15 +56,26 @@ export async function createDelivery(
 
 // Get All Deliveries
 export async function getDeliveries(
-  _req: Request,
+  req: Request,
   res: Response,
 ) {
   try {
-    const result = await deliveryService.getDeliveries();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
+
+    const result = await deliveryService.getDeliveries(
+      pagination,
+      status !== undefined ? { status } : undefined,
+    );
 
     res.json({
       success: true,
-      data: result,
+      data: result.items,
+      pagination: toPaginationMeta(result),
     });
   } catch (error) {
     sendSafeErrorResponse(
@@ -88,15 +100,22 @@ export async function getMyDeliveries(
       });
     }
 
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
     const result =
       await deliveryService.getDeliveriesByDeliveryBoy(
         req.user.userId,
+        pagination,
       );
 
     return res.status(200).json({
       success: true,
       message: "Assigned deliveries fetched successfully",
-      data: result,
+      data: result.items,
+      pagination: toPaginationMeta(result),
     });
   } catch (error) {
     return res.status(500).json({

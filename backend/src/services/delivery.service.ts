@@ -2,6 +2,7 @@ import { DeliveryRepository } from "../repositories/delivery.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export class DeliveryService {
   constructor(
@@ -44,8 +45,8 @@ export class DeliveryService {
     return this.repository.create(orderId, packageId);
   }
 
-  async getDeliveries() {
-    return this.repository.findAll();
+  async getDeliveries(pagination: PaginationRequest, filters?: { status?: string }) {
+    return this.repository.findAll(pagination, filters);
   }
 
   async getTrackingByDeliveryId(deliveryId: number) {
@@ -70,9 +71,11 @@ export class DeliveryService {
 
   async getDeliveriesByDeliveryBoy(
     deliveryBoyUserId: number,
+    pagination: PaginationRequest,
   ) {
     return this.repository.findByDeliveryBoyUserId(
       deliveryBoyUserId,
+      pagination,
     );
   }
 

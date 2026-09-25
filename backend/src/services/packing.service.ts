@@ -3,6 +3,7 @@ import { PickingRepository } from "../repositories/picking.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export class PackingService {
   constructor(
@@ -39,8 +40,8 @@ export class PackingService {
     );
   }
 
-  async getTasks() {
-    return this.repository.findAll();
+  async getTasks(pagination: PaginationRequest) {
+    return this.repository.findAll(pagination);
   }
 
   async getTaskById(id: number) {

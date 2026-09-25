@@ -7,6 +7,7 @@ import type {
   CompletePickingTaskInput,
   CreatePickingTaskInput,
 } from "../validators/picking.validator.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export class PickingService {
   constructor(
@@ -15,7 +16,7 @@ export class PickingService {
   ) {}
 
   async createTask(input: CreatePickingTaskInput) {
-    const existingTasks = await this.repository.findAll();
+    const existingTasks = await this.repository.findByOrderId(input.orderId);
 
     const existing = existingTasks.find(
       (task) =>
@@ -45,15 +46,17 @@ export class PickingService {
     return this.getTaskById(taskId);
   }
 
-  async getTasks() {
-    const tasks = await this.repository.findAll();
+  async getTasks(pagination: PaginationRequest) {
+    const result = await this.repository.findAll(pagination);
 
-    return Promise.all(
-      tasks.map(async (task) => ({
+    const items = await Promise.all(
+      result.items.map(async (task) => ({
         ...task,
         items: await this.repository.findItems(task.Id),
       })),
     );
+
+    return { ...result, items };
   }
 
   async getTaskById(id: number) {

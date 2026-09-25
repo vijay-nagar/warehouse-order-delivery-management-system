@@ -4,6 +4,14 @@ import { getDatabasePool } from "../config/database.js";
 import { PackingRepository } from "./packing.repository.js";
 import { recordStatusChange } from "../services/order-status.service.js";
 import { insertInventoryTransactionInTransaction } from "./inventory-transaction.repository.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export interface PickingTaskRow {
   Id: number;
@@ -189,10 +197,24 @@ export class PickingRepository {
       `);
   }
 
-  async findAll(): Promise<PickingTaskRow[]> {
+  async findAll(
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<PickingTaskRow>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const result = await pool.request().query<PickingTaskRow>(`
+    const countResult = await pool.request().query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount FROM dbo.PickingTasks;
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const result = await pool
+      .request()
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize)
+      .query<PickingTaskRow>(`
       SELECT
         Id,
         OrderId,
@@ -205,8 +227,44 @@ export class PickingRepository {
         CreatedAt,
         UpdatedAt
       FROM dbo.PickingTasks
-      ORDER BY Id DESC;
+      ORDER BY Id DESC
+      OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
     `);
+
+    return {
+      items: result.recordset,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
+  }
+
+  // Unpaginated by design: used only to check whether an order already has
+  // an active picking task, which must scan every task for that order, not
+  // just one page of the global list.
+  async findByOrderId(orderId: number): Promise<PickingTaskRow[]> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("OrderId", sql.Int, orderId)
+      .query<PickingTaskRow>(`
+        SELECT
+          Id,
+          OrderId,
+          PickerUserId,
+          Status,
+          AssignedAt,
+          StartedAt,
+          CompletedAt,
+          Notes,
+          CreatedAt,
+          UpdatedAt
+        FROM dbo.PickingTasks
+        WHERE OrderId = @OrderId
+        ORDER BY Id DESC;
+      `);
 
     return result.recordset;
   }

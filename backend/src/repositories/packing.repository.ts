@@ -1,6 +1,14 @@
 import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
 import { recordStatusChange } from "../services/order-status.service.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export interface PackingTaskRow {
   Id: number;
@@ -147,10 +155,24 @@ export class PackingRepository {
     return row;
   }
 
-  async findAll(): Promise<PackingTaskRow[]> {
+  async findAll(
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<PackingTaskRow>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const result = await pool.request().query<PackingTaskRow>(`
+    const countResult = await pool.request().query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount FROM dbo.PackingTasks;
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const result = await pool
+      .request()
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize)
+      .query<PackingTaskRow>(`
       SELECT
         Id,
         OrderId,
@@ -165,10 +187,17 @@ export class PackingRepository {
         CreatedAt,
         UpdatedAt
       FROM dbo.PackingTasks
-      ORDER BY Id DESC;
+      ORDER BY Id DESC
+      OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
     `);
 
-    return result.recordset;
+    return {
+      items: result.recordset,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async findById(id: number): Promise<PackingTaskRow | null> {

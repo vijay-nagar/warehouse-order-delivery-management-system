@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { PackingRepository } from "../repositories/packing.repository.js";
 import { sendSafeErrorResponse } from "../utils/error-response.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 import { PackingService } from "../services/packing.service.js";
 import {
   assignPackingTaskSchema,
@@ -40,13 +41,19 @@ export async function createPackingTask(req: Request, res: Response) {
   }
 }
 
-export async function getPackingTasks(_req: Request, res: Response) {
+export async function getPackingTasks(req: Request, res: Response) {
   try {
-    const result = await packingService.getTasks();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
+    const result = await packingService.getTasks(pagination);
 
     res.json({
       success: true,
-      data: result,
+      data: result.items,
+      pagination: toPaginationMeta(result),
     });
   } catch (error) {
     sendSafeErrorResponse(res, error, "Failed to get packing tasks", 500);
