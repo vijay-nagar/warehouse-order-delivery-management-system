@@ -1,32 +1,120 @@
 import { NavLink } from "react-router-dom";
-import { getStoredUser } from "../../services/storage/authStorage";
-import { hasRole } from "../../permissions/access";
+import { getStoredUser } from "../../features/auth/storage/authStorage";
+import { hasRole } from "../../shared/permissions/access";
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const navigation: Array<{ label: string; path: string; roles?: string[] }> = [
-  { label: "Dashboard", path: "/" },
-  { label: "Orders", path: "/orders" },
-  { label: "Warehouse", path: "/warehouses" },
-  { label: "Zones", path: "/zones" },
-  { label: "Shelves", path: "/shelves" },
-  { label: "Bins", path: "/bins" },
-  { label: "Inventory", path: "/inventory" },
-  { label: "Picking", path: "/picking" },
-  { label: "Packing", path: "/packing" },
-  { label: "Delivery", path: "/delivery" },
-  { label: "Customers", path: "/customers" },
-  { label: "Products", path: "/products" },
-  { label: "Notifications", path: "/notifications" },
-  { label: "Reports", path: "/reports" },
-  { label: "System", path: "/system" },
+interface NavigationItem {
+  label: string;
+  path: string;
+  roles?: string[];
+}
+
+const navigation: NavigationItem[] = [
+  {
+    label: "Dashboard",
+    path: "/",
+  },
+  {
+    label: "Picking",
+    path: "/picking",
+    roles: ["Super Admin", "Warehouse Manager"],
+  },
+  {
+    label: "Packing",
+    path: "/packing",
+    roles: ["Super Admin", "Warehouse Manager"],
+  },
+  {
+    label: "Delivery",
+    path: "/delivery",
+    roles: ["Super Admin", "Warehouse Manager"],
+  },
+  {
+    label: "Orders",
+    path: "/orders",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Warehouse",
+    path: "/warehouses",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Zones",
+    path: "/zones",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Shelves",
+    path: "/shelves",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Bins",
+    path: "/bins",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Inventory",
+    path: "/inventory",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Customers",
+    path: "/customers",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Products",
+    path: "/products",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Notifications",
+    path: "/notifications",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "Reports",
+    path: "/reports",
+    roles: ["Super Admin"],
+  },
+  {
+    label: "System",
+    path: "/system",
+    roles: ["Super Admin"],
+  },
 ];
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({
+  isOpen,
+  onClose,
+}: SidebarProps) {
   const user = getStoredUser();
+
+  const isWarehouseManager = hasRole(user, "Warehouse Manager");
+
+  const visibleNavigation = navigation.filter((item) => {
+    if (isWarehouseManager) {
+      return (
+        item.path === "/" ||
+        item.path === "/picking" ||
+        item.path === "/packing" ||
+        item.path === "/delivery"
+      );
+    }
+
+    if (!item.roles) {
+      return true;
+    }
+
+    return item.roles.some((role) => hasRole(user, role));
+  });
+
   return (
     <>
       {isOpen && (
@@ -58,10 +146,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         <nav className="sidebar-nav">
-          {navigation.filter((item) => !item.roles || item.roles.some((role) => hasRole(user, role))).map((item) => (
+          {visibleNavigation.map((item) => (
             <NavLink
               key={item.path}
-              to={item.path}
+              to={
+                isWarehouseManager && item.path === "/"
+                  ? "/warehouse/dashboard"
+                  : item.path
+              }
               end={item.path === "/"}
               onClick={onClose}
               className={({ isActive }) =>

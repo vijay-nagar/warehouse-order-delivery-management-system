@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { notificationsApi } from "../../../services/api/backend";
-import { toApiError } from "../../../services/api/errors";
+import { notificationsApi } from "../api/notificationsApi";
+import { toApiError } from "../../../shared/api/errors";
 
 interface Notification {
   id: number;

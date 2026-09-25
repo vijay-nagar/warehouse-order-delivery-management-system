@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Dialog } from "../../../components/common/Dialog";
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from "../../../components/common/AsyncStates";
-import { useToast } from "../../../components/common/Toast";
-import { useResourceList } from "../../../hooks/useResourceList";
-import { ordersApi } from "../../../services/api/backend";
-import { toApiError } from "../../../services/api/errors";
-import type { ResourceRow } from "../../../types/api";
+import { Dialog } from "../../../shared/components/overlay/Dialog";
+import { ErrorState, LoadingState, PageHeader, StatusBadge } from "../../../shared/components/feedback/AsyncStates";
+import { useToast } from "../../../app/providers/ToastProvider";
+import { useResourceList } from "../../../shared/hooks/useResourceList";
+import { ordersApi } from "../api/ordersApi";
+import { toApiError } from "../../../shared/api/errors";
+import type { ResourceRow } from "../../../shared/types/api";
 
 const positiveInteger = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value > 0;
 

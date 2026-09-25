@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { reportsApi } from "../../../services/api/backend";
-import { toApiError } from "../../../services/api/errors";
+import { reportsApi } from "../api/reportsApi";
+import { toApiError } from "../../../shared/api/errors";
 
 interface StatusReport {
   status: string;

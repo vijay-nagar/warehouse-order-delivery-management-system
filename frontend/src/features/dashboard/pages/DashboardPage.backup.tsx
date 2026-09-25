@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { deliveryApi, inventoryApi, ordersApi, packingApi, pickingApi } from "../../../services/api/backend";
+import { deliveryApi } from "../../delivery/api/deliveryApi";
+import { inventoryApi } from "../../inventory/api/inventoryApi";
+import { ordersApi } from "../../orders/api/ordersApi";
+import { packingApi } from "../../packing/api/packingApi";
+import { pickingApi } from "../../picking/api/pickingApi";
 import StatCard from "../components/StatCard";
 import StatusCard from "../components/StatusCard";
 import RecentOrders from "../components/RecentOrders";

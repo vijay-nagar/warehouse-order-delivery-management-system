@@ -1,0 +1,1610 @@
+/* ============================================================
+   DELIVERY PORTAL
+   Delivery Boy Dashboard
+   Page-specific / scoped stylesheet
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   DESIGN TOKENS
+   ------------------------------------------------------------ */
+
+.delivery-dashboard {
+  --delivery-primary: #2563eb;
+  --delivery-primary-dark: #1d4ed8;
+  --delivery-primary-soft: #eff6ff;
+
+  --delivery-success: #16a34a;
+  --delivery-success-soft: #ecfdf5;
+
+  --delivery-warning: #f59e0b;
+  --delivery-warning-soft: #fffbeb;
+
+  --delivery-danger: #dc2626;
+  --delivery-danger-soft: #fef2f2;
+
+  --delivery-text: #172033;
+  --delivery-text-secondary: #475569;
+  --delivery-text-muted: #64748b;
+  --delivery-text-light: #94a3b8;
+
+  --delivery-border: #e2e8f0;
+  --delivery-border-light: #eef2f7;
+
+  --delivery-background: #f5f7fb;
+  --delivery-surface: #ffffff;
+  --delivery-surface-soft: #f8fafc;
+
+  --delivery-radius-sm: 7px;
+  --delivery-radius-md: 10px;
+  --delivery-radius-lg: 14px;
+
+  --delivery-shadow-sm:
+    0 2px 8px rgba(15, 23, 42, 0.04);
+
+  --delivery-shadow-md:
+    0 6px 20px rgba(15, 23, 42, 0.06);
+
+  --delivery-shadow-lg:
+    0 12px 32px rgba(15, 23, 42, 0.08);
+
+  width: 100%;
+  min-height: 100%;
+  padding: 28px 32px 40px;
+  box-sizing: border-box;
+
+  background: var(--delivery-background);
+  color: var(--delivery-text);
+}
+
+/* Make every element inside dashboard predictable */
+
+.delivery-dashboard *,
+.delivery-dashboard *::before,
+.delivery-dashboard *::after {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   PAGE HEADER
+   ============================================================ */
+
+.delivery-dashboard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  width: 100%;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+.delivery-dashboard-top > div {
+  min-width: 0;
+}
+
+.delivery-eyebrow {
+  display: block;
+
+  margin: 0 0 7px;
+
+  color: var(--delivery-primary);
+
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 800;
+
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.delivery-dashboard-top h2 {
+  margin: 0;
+
+  color: var(--delivery-text);
+
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 800;
+
+  letter-spacing: -0.025em;
+}
+
+.delivery-dashboard-top p {
+  margin: 8px 0 0;
+
+  color: var(--delivery-text-muted);
+
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   REFRESH BUTTON
+   ============================================================ */
+
+.delivery-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  min-width: 88px;
+  height: 40px;
+
+  padding: 0 16px;
+
+  border: 1px solid #bfdbfe;
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-surface);
+  color: var(--delivery-primary);
+
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.delivery-refresh-button:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: var(--delivery-primary-soft);
+
+  box-shadow:
+    0 4px 12px rgba(37, 99, 235, 0.12);
+
+  transform: translateY(-1px);
+}
+
+.delivery-refresh-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.delivery-refresh-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   ERROR / ALERT
+   ============================================================ */
+
+.delivery-alert {
+  display: block;
+
+  width: 100%;
+  margin: 0 0 20px;
+
+  padding: 13px 16px;
+
+  border: 1px solid #fecaca;
+  border-radius: var(--delivery-radius-md);
+
+  background: var(--delivery-danger-soft);
+  color: #b91c1c;
+
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+/* ============================================================
+   STATISTICS
+   ============================================================ */
+
+.delivery-stats {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: 16px;
+
+  width: 100%;
+  margin: 0 0 24px;
+}
+
+.delivery-stat-card {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  min-width: 0;
+  min-height: 122px;
+
+  padding: 20px 20px 20px 24px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--delivery-border);
+  border-radius: var(--delivery-radius-lg);
+
+  background: var(--delivery-surface);
+
+  box-shadow: var(--delivery-shadow-md);
+
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+/* Left accent */
+
+.delivery-stat-card::before {
+  content: "";
+
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  width: 4px;
+  height: 100%;
+
+  background: var(--delivery-primary);
+}
+
+.delivery-stat-card:nth-child(2)::before {
+  background: var(--delivery-success);
+}
+
+.delivery-stat-card:nth-child(3)::before {
+  background: var(--delivery-warning);
+}
+
+.delivery-stat-card:nth-child(4)::before {
+  background: var(--delivery-danger);
+}
+
+.delivery-stat-card:hover {
+  transform: translateY(-2px);
+
+  box-shadow: var(--delivery-shadow-lg);
+}
+
+/* Label */
+
+.delivery-stat-card span {
+  display: block;
+
+  margin: 0 0 9px;
+
+  color: var(--delivery-text-secondary);
+
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+/* Number */
+
+.delivery-stat-card strong {
+  display: block;
+
+  margin: 0 0 7px;
+
+  color: var(--delivery-text);
+
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+
+  letter-spacing: -0.02em;
+}
+
+/* Description */
+
+.delivery-stat-card small {
+  display: block;
+
+  margin: 0;
+
+  color: var(--delivery-text-light);
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   MAIN DASHBOARD GRID
+   ============================================================ */
+
+.delivery-dashboard-grid {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1.2fr)
+    minmax(320px, 0.8fr);
+
+  gap: 20px;
+
+  width: 100%;
+  margin: 0 0 20px;
+
+  align-items: stretch;
+}
+
+/* ============================================================
+   COMMON PANEL
+   ============================================================ */
+
+.delivery-panel {
+  display: block;
+
+  width: 100%;
+  min-width: 0;
+
+  border: 1px solid var(--delivery-border);
+  border-radius: var(--delivery-radius-lg);
+
+  background: var(--delivery-surface);
+
+  box-shadow: var(--delivery-shadow-md);
+
+  overflow: hidden;
+}
+
+.delivery-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  width: 100%;
+  min-height: 68px;
+
+  gap: 16px;
+  padding: 16px 20px;
+
+  border-bottom: 1px solid var(--delivery-border-light);
+}
+
+.delivery-panel-header > div {
+  min-width: 0;
+}
+
+.delivery-panel-header h3 {
+  margin: 0;
+
+  color: var(--delivery-text);
+
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+
+.delivery-panel-header p {
+  margin: 4px 0 0;
+
+  color: var(--delivery-text-light);
+
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   CURRENT DELIVERY
+   ============================================================ */
+
+.current-delivery {
+  width: 100%;
+
+  padding: 22px;
+
+  background: var(--delivery-surface);
+}
+
+.current-delivery-number {
+  display: inline-flex;
+  align-items: center;
+
+  min-height: 29px;
+
+  padding: 0 10px;
+
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-primary-soft);
+  color: var(--delivery-primary);
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.current-delivery h4 {
+  margin: 16px 0 7px;
+
+  color: var(--delivery-text);
+
+  font-size: 19px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.current-delivery-address {
+  display: block;
+
+  margin: 0;
+
+  color: var(--delivery-text-muted);
+
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* Meta information */
+
+.current-delivery-meta {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 18px;
+}
+
+.current-delivery-meta span {
+  display: inline-flex;
+  align-items: center;
+
+  min-height: 34px;
+
+  padding: 0 11px;
+
+  border: 1px solid var(--delivery-border-light);
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-surface-soft);
+  color: var(--delivery-text-muted);
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   DELIVERY ACTIONS
+   ============================================================ */
+
+.delivery-action-row {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 9px;
+
+  margin-top: 20px;
+}
+
+.delivery-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 9px;
+
+  margin-top: 10px;
+}
+
+.delivery-action-row button,
+.delivery-primary-actions button,
+.delivery-failed-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 38px;
+
+  padding: 0 14px;
+
+  border-radius: var(--delivery-radius-sm);
+
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.delivery-secondary-button {
+  border: 1px solid #dbe3ee;
+
+  background: var(--delivery-surface);
+  color: #334155;
+}
+
+.delivery-secondary-button:hover:not(:disabled) {
+  border-color: #93c5fd;
+
+  background: var(--delivery-primary-soft);
+  color: var(--delivery-primary);
+}
+
+.delivery-primary-actions button {
+  border: 1px solid var(--delivery-primary);
+
+  background: var(--delivery-primary);
+  color: #ffffff;
+}
+
+.delivery-primary-actions button:hover:not(:disabled) {
+  border-color: var(--delivery-primary-dark);
+
+  background: var(--delivery-primary-dark);
+
+  box-shadow:
+    0 5px 14px rgba(37, 99, 235, 0.2);
+
+  transform: translateY(-1px);
+}
+
+.delivery-failed-button {
+  margin-top: 10px;
+
+  border: 1px solid #fecaca;
+
+  background: var(--delivery-danger-soft);
+  color: var(--delivery-danger);
+}
+
+.delivery-failed-button:hover:not(:disabled) {
+  border-color: #fca5a5;
+
+  background: #fee2e2;
+}
+
+.delivery-action-row button:disabled,
+.delivery-primary-actions button:disabled,
+.delivery-failed-button:disabled {
+  opacity: 0.55;
+
+  cursor: not-allowed;
+
+  box-shadow: none;
+  transform: none;
+}
+
+/* ============================================================
+   EMPTY CURRENT DELIVERY
+   ============================================================ */
+
+.delivery-empty-current {
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 270px;
+
+  padding: 32px;
+
+  text-align: center;
+}
+
+.delivery-empty-icon {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 52px;
+  height: 52px;
+
+  margin-bottom: 15px;
+
+  border-radius: 50%;
+
+  background: var(--delivery-success-soft);
+  color: var(--delivery-success);
+
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.delivery-empty-current h4 {
+  margin: 0;
+
+  color: var(--delivery-text);
+
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.delivery-empty-current p {
+  max-width: 380px;
+
+  margin: 7px 0 0;
+
+  color: var(--delivery-text-light);
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   ROUTE PANEL
+   ============================================================ */
+
+.delivery-route-preview {
+  width: 100%;
+
+  padding-bottom: 18px;
+}
+
+/* Map placeholder */
+
+.route-map-placeholder {
+  position: relative;
+
+  width: calc(100% - 36px);
+  height: 270px;
+
+  margin: 18px;
+
+  overflow: hidden;
+
+  border: 1px solid #dbe3ee;
+  border-radius: var(--delivery-radius-md);
+
+  background-color: #f8fafc;
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(148, 163, 184, 0.12) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      rgba(148, 163, 184, 0.12) 1px,
+      transparent 1px
+    );
+
+  background-size: 34px 34px;
+}
+
+/* Decorative roads */
+
+.route-map-placeholder::before {
+  content: "";
+
+  position: absolute;
+
+  width: 140%;
+  height: 46px;
+
+  top: 105px;
+  left: -20%;
+
+  background: rgba(226, 232, 240, 0.8);
+
+  transform: rotate(-16deg);
+}
+
+.route-map-placeholder::after {
+  content: "";
+
+  position: absolute;
+
+  width: 130%;
+  height: 32px;
+
+  top: 170px;
+  left: -15%;
+
+  background: rgba(226, 232, 240, 0.65);
+
+  transform: rotate(23deg);
+}
+
+/* Route grid */
+
+.route-map-grid {
+  position: absolute;
+
+  inset: 0;
+
+  z-index: 2;
+
+  pointer-events: none;
+}
+
+/* ============================================================
+   ROUTE PINS
+   ============================================================ */
+
+.route-map-pin {
+  position: absolute;
+
+  z-index: 5;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 30px;
+  height: 30px;
+
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+
+  background: var(--delivery-primary);
+  color: #ffffff;
+
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
+
+  box-shadow:
+    0 4px 12px rgba(37, 99, 235, 0.28);
+}
+
+.route-pin-one {
+  top: 23%;
+  left: 20%;
+}
+
+.route-pin-two {
+  top: 57%;
+  left: 51%;
+
+  background: var(--delivery-warning);
+
+  box-shadow:
+    0 4px 12px rgba(245, 158, 11, 0.28);
+}
+
+.route-pin-three {
+  top: 31%;
+  right: 17%;
+
+  background: var(--delivery-success);
+
+  box-shadow:
+    0 4px 12px rgba(22, 163, 74, 0.28);
+}
+
+/* Current location */
+
+.route-current-location {
+  position: absolute;
+
+  right: 14px;
+  bottom: 13px;
+
+  z-index: 6;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 8px;
+
+  min-height: 30px;
+
+  padding: 0 10px;
+
+  border: 1px solid var(--delivery-border);
+
+  border-radius: var(--delivery-radius-sm);
+
+  background: rgba(255, 255, 255, 0.96);
+
+  color: var(--delivery-text-secondary);
+
+  font-size: 10px;
+  font-weight: 700;
+
+  box-shadow: var(--delivery-shadow-sm);
+}
+
+.route-current-location span {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: var(--delivery-success);
+
+  box-shadow:
+    0 0 0 4px #dcfce7;
+}
+
+/* Route information */
+
+.route-info {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 0 18px;
+}
+
+.route-info strong {
+  color: var(--delivery-text);
+
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.route-info span {
+  color: var(--delivery-text-light);
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  text-align: right;
+}
+
+/* ============================================================
+   DELIVERY COUNT
+   ============================================================ */
+
+.delivery-count {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-width: 30px;
+  min-height: 28px;
+
+  padding: 0 9px;
+
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-primary-soft);
+  color: var(--delivery-primary);
+
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+/* ============================================================
+   MY DELIVERIES
+   ============================================================ */
+
+.delivery-list {
+  display: flex;
+  flex-direction: column;
+
+  width: 100%;
+}
+
+.delivery-card {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  width: 100%;
+
+  padding: 18px 20px;
+
+  border-bottom: 1px solid var(--delivery-border-light);
+
+  background: var(--delivery-surface);
+
+  transition:
+    background-color 160ms ease;
+}
+
+.delivery-card:last-child {
+  border-bottom: 0;
+}
+
+.delivery-card:hover {
+  background: var(--delivery-surface-soft);
+}
+
+.delivery-card-main {
+  flex: 1;
+
+  min-width: 0;
+}
+
+/* Order number */
+
+.delivery-order {
+  display: flex;
+
+  align-items: center;
+
+  gap: 5px;
+
+  margin-bottom: 8px;
+}
+
+.delivery-order span {
+  color: var(--delivery-text-light);
+
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.delivery-order strong {
+  color: var(--delivery-primary);
+
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+/* Customer */
+
+.delivery-customer {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  min-width: 0;
+}
+
+.delivery-customer strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: var(--delivery-text);
+
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 700;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delivery-customer span {
+  display: block;
+
+  overflow: hidden;
+
+  color: var(--delivery-text-muted);
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer */
+
+.delivery-card-footer {
+  display: flex;
+
+  align-items: center;
+
+  flex-wrap: wrap;
+
+  gap: 12px;
+
+  margin-top: 11px;
+}
+
+.delivery-card-footer > span {
+  color: var(--delivery-text-light);
+
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Actions */
+
+.delivery-card-actions {
+  display: flex;
+
+  align-items: center;
+
+  flex-shrink: 0;
+
+  gap: 7px;
+}
+
+.delivery-card-actions button {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 34px;
+
+  padding: 0 11px;
+
+  border: 1px solid #dbe3ee;
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-surface);
+  color: #334155;
+
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.delivery-card-actions button:hover:not(:disabled) {
+  border-color: #93c5fd;
+
+  background: var(--delivery-primary-soft);
+  color: var(--delivery-primary);
+}
+
+.delivery-card-actions button:disabled {
+  opacity: 0.5;
+
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   DELIVERY STATUS
+   ============================================================ */
+
+.delivery-status {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  min-height: 26px;
+
+  padding: 0 10px;
+
+  border-radius: 999px;
+
+  background: #f1f5f9;
+  color: #475569;
+
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 800;
+
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Status generated by TSX */
+
+.delivery-status.status-assigned {
+  background: var(--delivery-primary-soft);
+  color: var(--delivery-primary);
+}
+
+.delivery-status.status-picked_up {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.delivery-status.status-out_for_delivery {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.delivery-status.status-delivered {
+  background: var(--delivery-success-soft);
+  color: #15803d;
+}
+
+.delivery-status.status-failed {
+  background: var(--delivery-danger-soft);
+  color: var(--delivery-danger);
+}
+
+.delivery-status.status-returned {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.delivery-status.status-unknown {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* ============================================================
+   EMPTY DELIVERY LIST
+   ============================================================ */
+
+.delivery-empty-list {
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 190px;
+
+  padding: 30px;
+
+  text-align: center;
+}
+
+.delivery-empty-list h4 {
+  margin: 0;
+
+  color: var(--delivery-text);
+
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.delivery-empty-list p {
+  margin: 7px 0 0;
+
+  color: var(--delivery-text-light);
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+
+.delivery-modal-backdrop {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 9999;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(15, 23, 42, 0.58);
+
+  backdrop-filter: blur(4px);
+}
+
+.delivery-modal {
+  width: min(580px, 100%);
+
+  max-height: calc(100vh - 40px);
+
+  overflow-y: auto;
+
+  border: 1px solid var(--delivery-border);
+
+  border-radius: var(--delivery-radius-lg);
+
+  background: var(--delivery-surface);
+
+  box-shadow:
+    0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.delivery-modal-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 18px 20px;
+
+  border-bottom: 1px solid var(--delivery-border-light);
+}
+
+.delivery-modal-header h3 {
+  margin: 0;
+
+  color: var(--delivery-text);
+
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+
+.delivery-modal-header > button {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  width: 34px;
+  height: 34px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: var(--delivery-radius-sm);
+
+  background: #f1f5f9;
+  color: #475569;
+
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.delivery-modal-header > button:hover {
+  background: #e2e8f0;
+  color: var(--delivery-text);
+}
+
+.delivery-modal-body {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 12px;
+
+  padding: 20px;
+}
+
+.delivery-modal-body > div {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 5px;
+
+  min-width: 0;
+
+  padding: 12px;
+
+  border: 1px solid var(--delivery-border-light);
+
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-surface-soft);
+}
+
+.delivery-modal-body > div:nth-child(2) {
+  grid-column: span 2;
+}
+
+.delivery-modal-body span {
+  color: var(--delivery-text-light);
+
+  font-size: 10px;
+  line-height: 1.3;
+  font-weight: 700;
+
+  text-transform: uppercase;
+}
+
+.delivery-modal-body strong {
+  color: var(--delivery-text-secondary);
+
+  font-size: 13px;
+  line-height: 1.5;
+
+  word-break: break-word;
+}
+
+.delivery-modal-actions {
+  display: flex;
+
+  justify-content: flex-end;
+
+  gap: 9px;
+
+  padding: 16px 20px 20px;
+
+  border-top: 1px solid var(--delivery-border-light);
+}
+
+.delivery-modal-actions button {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 38px;
+
+  padding: 0 14px;
+
+  border: 1px solid #dbe3ee;
+
+  border-radius: var(--delivery-radius-sm);
+
+  background: var(--delivery-surface);
+  color: #334155;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+.delivery-modal-actions button:first-child {
+  border-color: var(--delivery-primary);
+
+  background: var(--delivery-primary);
+  color: #ffffff;
+}
+
+.delivery-modal-actions button:first-child:hover {
+  border-color: var(--delivery-primary-dark);
+
+  background: var(--delivery-primary-dark);
+}
+
+/* ============================================================
+   LOADING STATE
+   ============================================================ */
+
+.delivery-boy-state {
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 400px;
+
+  padding: 40px;
+
+  text-align: center;
+}
+
+.delivery-boy-spinner {
+  width: 34px;
+  height: 34px;
+
+  border: 3px solid #dbeafe;
+  border-top-color: var(--delivery-primary);
+
+  border-radius: 50%;
+
+  animation: delivery-boy-spin 750ms linear infinite;
+}
+
+.delivery-boy-state p {
+  margin: 14px 0 0;
+
+  color: var(--delivery-text-muted);
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@keyframes delivery-boy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   TABLET
+   ============================================================ */
+
+@media (max-width: 1150px) {
+  .delivery-dashboard {
+    padding: 24px;
+  }
+
+  .delivery-stats {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .delivery-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   MOBILE
+   ============================================================ */
+
+@media (max-width: 700px) {
+  .delivery-dashboard {
+    padding: 18px 14px 30px;
+  }
+
+  .delivery-dashboard-top {
+    flex-direction: column;
+
+    gap: 16px;
+  }
+
+  .delivery-dashboard-top h2 {
+    font-size: 24px;
+  }
+
+  .delivery-refresh-button {
+    width: 100%;
+  }
+
+  .delivery-stats {
+    grid-template-columns: 1fr;
+
+    gap: 12px;
+  }
+
+  .delivery-stat-card {
+    min-height: 108px;
+  }
+
+  .delivery-panel-header {
+    padding: 15px 16px;
+  }
+
+  .current-delivery {
+    padding: 18px;
+  }
+
+  .delivery-action-row,
+  .delivery-primary-actions {
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+  .delivery-action-row button,
+  .delivery-primary-actions button,
+  .delivery-failed-button {
+    width: 100%;
+  }
+
+  .route-map-placeholder {
+    width: calc(100% - 28px);
+
+    height: 215px;
+
+    margin: 14px;
+  }
+
+  .route-info {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    padding: 0 14px;
+  }
+
+  .route-info span {
+    text-align: left;
+  }
+
+  .delivery-card {
+    flex-direction: column;
+
+    align-items: stretch;
+
+    gap: 12px;
+
+    padding: 17px 16px;
+  }
+
+  .delivery-customer span {
+    white-space: normal;
+  }
+
+  .delivery-card-actions {
+    width: 100%;
+
+    justify-content: flex-start;
+  }
+
+  .delivery-card-actions button {
+    flex: 1;
+  }
+
+  .delivery-modal-backdrop {
+    padding: 12px;
+  }
+
+  .delivery-modal {
+    max-height: calc(100vh - 24px);
+  }
+
+  .delivery-modal-body {
+    grid-template-columns: 1fr;
+
+    padding: 16px;
+  }
+
+  .delivery-modal-body > div:nth-child(2) {
+    grid-column: auto;
+  }
+
+  .delivery-modal-actions {
+    flex-direction: column;
+
+    padding: 14px 16px 16px;
+  }
+
+  .delivery-modal-actions button {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 430px) {
+  .delivery-dashboard {
+    padding: 16px 12px 24px;
+  }
+
+  .delivery-dashboard-top h2 {
+    font-size: 21px;
+  }
+
+  .delivery-stat-card strong {
+    font-size: 27px;
+  }
+
+  .delivery-panel-header h3 {
+    font-size: 15px;
+  }
+
+  .delivery-panel-header p {
+    font-size: 11px;
+  }
+
+  .delivery-panel-header {
+    align-items: flex-start;
+  }
+
+  .delivery-card-actions {
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+  .delivery-card-actions button {
+    width: 100%;
+  }
+
+  .route-map-pin {
+    width: 26px;
+    height: 26px;
+  }
+}

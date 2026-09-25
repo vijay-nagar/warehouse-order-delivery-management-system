@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Dialog } from "../../../components/common/Dialog";
-import { EmptyState, ErrorState, LoadingState } from "../../../components/common/AsyncStates";
-import { useToast } from "../../../components/common/Toast";
-import { useAsyncRequest } from "../../../hooks/useAsyncRequest";
-import { useResourceList } from "../../../hooks/useResourceList";
-import { toApiError } from "../../../services/api/errors";
-import { inventoryApi, inventoryTransactionsApi } from "../../../services/api/backend";
-import type { ResourceRow } from "../../../types/api";
+import { Dialog } from "../../../shared/components/overlay/Dialog";
+import { EmptyState, ErrorState, LoadingState } from "../../../shared/components/feedback/AsyncStates";
+import { useToast } from "../../../app/providers/ToastProvider";
+import { useAsyncRequest } from "../../../shared/hooks/useAsyncRequest";
+import { useResourceList } from "../../../shared/hooks/useResourceList";
+import { toApiError } from "../../../shared/api/errors";
+import { inventoryApi, inventoryTransactionsApi } from "../api/inventoryApi";
+import type { ResourceRow } from "../../../shared/types/api";
 
 type TransactionKind = "stockIn" | "stockOut" | "adjustment";
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { healthApi } from "../../../services/api/backend";
-import { toApiError } from "../../../services/api/errors";
+import { healthApi } from "../api/healthApi";
+import { toApiError } from "../../../shared/api/errors";
 
 interface HealthResponse {
   status?: string;
