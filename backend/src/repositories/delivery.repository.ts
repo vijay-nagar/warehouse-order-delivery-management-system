@@ -1,5 +1,8 @@
 import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
+import { recordStatusChange } from "../services/order-status.service.js";
+import { isValidTransition } from "../domain/order/order-transitions.js";
+import type { OrderStatus } from "../domain/order/order-status.types.js";
 
 export interface DeliveryRow {
   Id: number;
@@ -35,6 +38,15 @@ export interface TrackingRow {
   Longitude: number | null;
   Remarks: string | null;
   CreatedAt: Date;
+}
+
+export interface DeliveryAttemptRow {
+  Id: number;
+  DeliveryId: number;
+  AttemptNumber: number;
+  Status: string;
+  FailureReason: string | null;
+  AttemptedAt: Date;
 }
 
 export class DeliveryRepository {
@@ -281,27 +293,24 @@ export class DeliveryRepository {
     return this.updateStatus(id, "PICKED_UP", "PickedUpAt");
   }
 
-  async outForDelivery(id: number): Promise<DeliveryRow | null> {
-    return this.updateStatus(
-      id,
-      "OUT_FOR_DELIVERY",
-      "OutForDeliveryAt",
-      "OUT_FOR_DELIVERY",
-    );
+  async outForDelivery(
+    id: number,
+    actorUserId: number | null = null,
+  ): Promise<DeliveryRow | null> {
+    return this.updateStatus(id, "OUT_FOR_DELIVERY", "OutForDeliveryAt", actorUserId);
   }
 
-  async deliver(id: number): Promise<DeliveryRow | null> {
-    return this.updateStatus(
-      id,
-      "DELIVERED",
-      "DeliveredAt",
-      "DELIVERED",
-    );
+  async deliver(
+    id: number,
+    actorUserId: number | null = null,
+  ): Promise<DeliveryRow | null> {
+    return this.updateStatus(id, "DELIVERED", "DeliveredAt", actorUserId);
   }
 
   async fail(
     id: number,
     reason: string,
+    actorUserId: number | null = null,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
@@ -381,22 +390,11 @@ export class DeliveryRepository {
           );
         `);
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, row.OrderId)
-        .query(`
-          UPDATE dbo.Orders
-          SET
-            Status = 'FAILED',
-            UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'OUT_FOR_DELIVERY';
-        `);
-
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          "Order must be in OUT_FOR_DELIVERY status before delivery can fail",
-        );
-      }
+      await this.resolveOrderStatusAfterDeliveryChange(
+        transaction,
+        row.OrderId,
+        actorUserId,
+      );
 
       await transaction.commit();
 
@@ -410,6 +408,7 @@ export class DeliveryRepository {
   async returnDelivery(
     id: number,
     reason: string,
+    actorUserId: number | null = null,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
@@ -454,30 +453,226 @@ export class DeliveryRepository {
         return null;
       }
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, row.OrderId)
-        .query(`
-          UPDATE dbo.Orders
-          SET
-            Status = 'RETURNED',
-            UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'FAILED';
-        `);
+      const recoveredProducts = await this.recoverStockForOrder(
+        transaction,
+        row.OrderId,
+        id,
+      );
 
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          "Order must be in FAILED status before delivery can be returned",
-        );
-      }
+      await this.resolveOrderStatusAfterDeliveryChange(
+        transaction,
+        row.OrderId,
+        actorUserId,
+      );
 
       await transaction.commit();
+
+      if (recoveredProducts.length > 0) {
+        console.log(
+          `[DELIVERY] Recovered stock for order ${row.OrderId} (delivery ${id}):`,
+          recoveredProducts,
+        );
+      }
 
       return row;
     } catch (error) {
       await transaction.rollback();
       throw error;
     }
+  }
+
+  /**
+   * Recovers inventory for a returned order. Scoped to the order's picking
+   * task (not per-package: Packages has no item-level breakdown in this
+   * schema), so this is precise for single-package orders and an
+   * order-level approximation for multi-package orders. Idempotent via
+   * OrderInventoryReservations.RecoveredAt — safe to call more than once
+   * for the same order (e.g. a retried request), since it only ever acts
+   * on CONSUMED reservations that have not yet been recovered.
+   */
+  private async recoverStockForOrder(
+    transaction: sql.Transaction,
+    orderId: number,
+    deliveryId: number,
+  ): Promise<Array<{ productId: number; quantity: number }>> {
+    const reservationsResult = await new sql.Request(transaction)
+      .input("OrderId", sql.Int, orderId)
+      .query<{
+        Id: number;
+        InventoryId: number;
+        ProductId: number;
+        Quantity: number;
+      }>(`
+        SELECT Id, InventoryId, ProductId, Quantity
+        FROM dbo.OrderInventoryReservations WITH (UPDLOCK, ROWLOCK)
+        WHERE OrderId = @OrderId
+          AND Status = 'CONSUMED'
+          AND RecoveredAt IS NULL;
+      `);
+
+    const recovered: Array<{ productId: number; quantity: number }> = [];
+
+    for (const reservation of reservationsResult.recordset) {
+      const inventoryResult = await new sql.Request(transaction)
+        .input("InventoryId", sql.Int, reservation.InventoryId)
+        .query<{ AvailableQuantity: number }>(`
+          SELECT AvailableQuantity
+          FROM dbo.Inventory WITH (UPDLOCK, ROWLOCK)
+          WHERE Id = @InventoryId;
+        `);
+
+      const previousQuantity = inventoryResult.recordset[0]?.AvailableQuantity;
+
+      if (previousQuantity === undefined) {
+        continue;
+      }
+
+      const newQuantity = previousQuantity + reservation.Quantity;
+
+      await new sql.Request(transaction)
+        .input("InventoryId", sql.Int, reservation.InventoryId)
+        .input("Quantity", sql.Int, reservation.Quantity)
+        .query(`
+          UPDATE dbo.Inventory
+          SET
+            AvailableQuantity = AvailableQuantity + @Quantity,
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @InventoryId;
+        `);
+
+      const markedResult = await new sql.Request(transaction)
+        .input("Id", sql.Int, reservation.Id)
+        .query(`
+          UPDATE dbo.OrderInventoryReservations
+          SET
+            RecoveredAt = SYSUTCDATETIME(),
+            UpdatedAt = SYSUTCDATETIME()
+          WHERE Id = @Id
+            AND Status = 'CONSUMED'
+            AND RecoveredAt IS NULL;
+        `);
+
+      if (markedResult.rowsAffected[0] !== 1) {
+        // Another concurrent recovery already claimed this reservation;
+        // do not double-credit inventory.
+        continue;
+      }
+
+      await new sql.Request(transaction)
+        .input("InventoryId", sql.Int, reservation.InventoryId)
+        .input("Type", sql.NVarChar(20), "RETURN_RECOVERY")
+        .input("Quantity", sql.Int, reservation.Quantity)
+        .input("PreviousQuantity", sql.Int, previousQuantity)
+        .input("NewQuantity", sql.Int, newQuantity)
+        .input(
+          "Remarks",
+          sql.NVarChar(500),
+          `Return recovery for DeliveryId=${deliveryId}, OrderId=${orderId}`,
+        )
+        .query(`
+          INSERT INTO dbo.InventoryTransactions
+          (
+            InventoryId,
+            TransactionType,
+            Quantity,
+            PreviousQuantity,
+            NewQuantity,
+            Remarks
+          )
+          VALUES
+          (
+            @InventoryId,
+            @Type,
+            @Quantity,
+            @PreviousQuantity,
+            @NewQuantity,
+            @Remarks
+          );
+        `);
+
+      recovered.push({ productId: reservation.ProductId, quantity: reservation.Quantity });
+    }
+
+    return recovered;
+  }
+
+  /**
+   * Centralized multi-package order-status resolver (P0-10). Locks
+   * sibling Deliveries rows for the order and decides, from their
+   * aggregate state, what (if anything) the parent Order's status should
+   * become. Never throws on a "not ready yet" state — it simply returns
+   * null (no-op) so a sibling package's own valid status write is never
+   * rolled back just because the order isn't ready to transition yet.
+   * A genuinely mixed terminal outcome (e.g. some delivered, some
+   * returned) has no target status in the declared enum and is
+   * deliberately left unresolved rather than invented.
+   */
+  private async resolveOrderStatusAfterDeliveryChange(
+    transaction: sql.Transaction,
+    orderId: number,
+    actorUserId: number | null,
+  ): Promise<OrderStatus | null> {
+    const siblingsResult = await new sql.Request(transaction)
+      .input("OrderId", sql.Int, orderId)
+      .query<{ Status: string }>(`
+        SELECT Status
+        FROM dbo.Deliveries WITH (UPDLOCK, HOLDLOCK)
+        WHERE OrderId = @OrderId;
+      `);
+
+    const statuses = siblingsResult.recordset.map((row) => row.Status);
+    const total = statuses.length;
+
+    if (total === 0) {
+      return null;
+    }
+
+    const delivered = statuses.filter((status) => status === "DELIVERED").length;
+    const returned = statuses.filter((status) => status === "RETURNED").length;
+    const failed = statuses.filter((status) => status === "FAILED").length;
+
+    let target: OrderStatus | null = null;
+
+    if (delivered === total) {
+      target = "DELIVERED";
+    } else if (returned === total) {
+      target = "RETURNED";
+    } else if (failed + returned === total && failed > 0) {
+      target = "FAILED";
+    } else if (delivered === 0) {
+      // Nothing delivered yet: the order is still actively in flight
+      // (some mix of ASSIGNED/PICKED_UP/OUT_FOR_DELIVERY/FAILED siblings).
+      target = "OUT_FOR_DELIVERY";
+    }
+    // Otherwise: a genuinely mixed outcome (some delivered, some not yet
+    // terminal or returned) — leave Orders.Status unchanged.
+
+    if (!target) {
+      return null;
+    }
+
+    const orderResult = await new sql.Request(transaction)
+      .input("OrderId2", sql.Int, orderId)
+      .query<{ Status: string }>(`
+        SELECT Status FROM dbo.Orders WHERE Id = @OrderId2;
+      `);
+
+    const current = orderResult.recordset[0]?.Status as OrderStatus | undefined;
+
+    if (!current || current === target || !isValidTransition(current, target)) {
+      return null;
+    }
+
+    await recordStatusChange({
+      transaction,
+      orderId,
+      fromStatus: current,
+      toStatus: target,
+      changedBy: actorUserId,
+      reason: "Resolved from delivery/package aggregation",
+    });
+
+    return target;
   }
 
   async addTracking(
@@ -559,6 +754,29 @@ export class DeliveryRepository {
     return result.recordset;
   }
 
+  async getAttemptsByDeliveryId(
+    deliveryId: number,
+  ): Promise<DeliveryAttemptRow[]> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("DeliveryId", sql.Int, deliveryId)
+      .query<DeliveryAttemptRow>(`
+        SELECT
+          Id,
+          DeliveryId,
+          AttemptNumber,
+          Status,
+          FailureReason,
+          AttemptedAt
+        FROM dbo.DeliveryAttempts
+        WHERE DeliveryId = @DeliveryId
+        ORDER BY AttemptNumber ASC;
+      `);
+
+    return result.recordset;
+  }
 
   private async updateStatus(
     id: number,
@@ -567,7 +785,7 @@ export class DeliveryRepository {
       | "PickedUpAt"
       | "OutForDeliveryAt"
       | "DeliveredAt",
-    orderStatus?: string,
+    actorUserId: number | null = null,
   ): Promise<DeliveryRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
@@ -586,6 +804,7 @@ export class DeliveryRepository {
 
       const result = await new sql.Request(transaction)
         .input("Id", sql.Int, id)
+        .input("Status", sql.NVarChar(40), status)
         .input(
           "ExpectedDeliveryStatus",
           sql.NVarChar(50),
@@ -594,7 +813,7 @@ export class DeliveryRepository {
         .query<DeliveryRow>(`
           UPDATE dbo.Deliveries
           SET
-            Status = '${status}',
+            Status = @Status,
             ${timestampColumn} = SYSUTCDATETIME(),
             UpdatedAt = SYSUTCDATETIME()
           OUTPUT
@@ -627,36 +846,12 @@ export class DeliveryRepository {
         return null;
       }
 
-      if (orderStatus) {
-        const expectedOrderStatus =
-          status === "OUT_FOR_DELIVERY"
-            ? "PACKED"
-            : status === "DELIVERED"
-              ? "OUT_FOR_DELIVERY"
-              : undefined;
-
-        const orderResult = await new sql.Request(transaction)
-          .input("OrderId", sql.Int, row.OrderId)
-          .input("OrderStatus", sql.NVarChar(50), orderStatus)
-          .input(
-            "ExpectedOrderStatus",
-            sql.NVarChar(50),
-            expectedOrderStatus ?? "",
-          )
-          .query(`
-            UPDATE dbo.Orders
-            SET
-              Status = @OrderStatus,
-              UpdatedAt = SYSUTCDATETIME()
-            WHERE Id = @OrderId
-              AND (@ExpectedOrderStatus = '' OR Status = @ExpectedOrderStatus);
-          `);
-
-        if (orderResult.rowsAffected[0] !== 1) {
-          throw new Error(
-            "Order status transition failed during delivery update",
-          );
-        }
+      if (status === "OUT_FOR_DELIVERY" || status === "DELIVERED") {
+        await this.resolveOrderStatusAfterDeliveryChange(
+          transaction,
+          row.OrderId,
+          actorUserId,
+        );
       }
 
       await transaction.commit();

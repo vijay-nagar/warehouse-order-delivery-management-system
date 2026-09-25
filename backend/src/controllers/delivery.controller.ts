@@ -3,6 +3,13 @@ import type { Request, Response } from "express";
 import { DeliveryRepository } from "../repositories/delivery.repository.js";
 import { sendSafeErrorResponse } from "../utils/error-response.js";
 import { DeliveryService } from "../services/delivery.service.js";
+import {
+  assignDeliverySchema,
+  createDeliverySchema,
+  failureSchema,
+  returnSchema,
+  trackingSchema,
+} from "../validators/delivery.validator.js";
 
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 
@@ -15,19 +22,29 @@ export async function createDelivery(
   req: Request,
   res: Response,
 ) {
+  const validation = createDeliverySchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
   try {
     const result = await deliveryService.createDelivery(
-      req.body.orderId,
-      req.body.packageId,
+      validation.data.orderId,
+      validation.data.packageId,
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Delivery created successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to create delivery",
@@ -158,24 +175,66 @@ export async function getDeliveryTracking(
   }
 }
 
+// Get Delivery Attempts
+export async function getDeliveryAttempts(
+  req: Request,
+  res: Response,
+) {
+  try {
+    const deliveryId = Number(req.params.id);
+
+    if (!Number.isInteger(deliveryId) || deliveryId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid delivery ID",
+      });
+    }
+
+    const result = await deliveryService.getAttemptsByDeliveryId(deliveryId);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    return res.status(404).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Attempts not found",
+    });
+  }
+}
+
 // Assign Delivery
 export async function assignDelivery(
   req: Request,
   res: Response,
 ) {
+  const validation = assignDeliverySchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
   try {
     const result = await deliveryService.assign(
       Number(req.params.id),
-      req.body.deliveryBoyUserId,
+      validation.data.deliveryBoyUserId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery assigned successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to assign delivery",
@@ -186,21 +245,26 @@ export async function assignDelivery(
 
 // Pickup Delivery
 export async function pickupDelivery(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.pickup(
       Number(req.params.id),
+      req.user.userId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery picked up successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to pickup delivery",
@@ -211,21 +275,26 @@ export async function pickupDelivery(
 
 // Out For Delivery
 export async function outForDelivery(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.outForDelivery(
       Number(req.params.id),
+      req.user.userId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery marked out for delivery successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to update delivery",
@@ -236,21 +305,26 @@ export async function outForDelivery(
 
 // Complete Delivery
 export async function deliverDelivery(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.deliver(
       Number(req.params.id),
+      req.user.userId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery completed successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to complete delivery",
@@ -261,22 +335,37 @@ export async function deliverDelivery(
 
 // Fail Delivery
 export async function failDelivery(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  const validation = failureSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.fail(
       Number(req.params.id),
-      req.body.failureReason ?? req.body.reason,
+      validation.data.failureReason,
+      req.user.userId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery marked as failed",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to mark delivery failed",
@@ -287,22 +376,37 @@ export async function failDelivery(
 
 // Return Delivery
 export async function returnDelivery(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  const validation = returnSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.returnDelivery(
       Number(req.params.id),
-      req.body.returnReason ?? req.body.reason,
+      validation.data.returnReason,
+      req.user.userId,
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Delivery returned successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to return delivery",
@@ -313,24 +417,39 @@ export async function returnDelivery(
 
 // Add Tracking
 export async function addTracking(
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) {
+  const validation = trackingSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Authentication required" });
+  }
+
   try {
     const result = await deliveryService.addTracking(
       Number(req.params.id),
-      req.body.latitude,
-      req.body.longitude,
-      req.body.remarks,
+      req.user.userId,
+      validation.data.latitude,
+      validation.data.longitude,
+      validation.data.remarks,
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Delivery tracking added successfully",
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(
+    return sendSafeErrorResponse(
       res,
       error,
       "Failed to add tracking",

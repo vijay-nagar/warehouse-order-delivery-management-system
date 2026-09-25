@@ -1,6 +1,13 @@
 import { InventoryReservationRepository } from "../repositories/inventory-reservation.repository.js";
 import { OrderRepository } from "../repositories/order.repository.js";
 import type { InventoryReservation } from "../domain/inventory/reservation.types.js";
+import type { WarehouseAllocationShortfall } from "../repositories/warehouse-allocation.repository.js";
+
+export interface ReserveOrderResult {
+  reservations: InventoryReservation[];
+  warehouseId: number | null;
+  shortfalls: WarehouseAllocationShortfall[];
+}
 
 export class InventoryReservationService {
   constructor(
@@ -9,39 +16,18 @@ export class InventoryReservationService {
       new InventoryReservationRepository(),
   ) {}
 
-  async reserveOrder(orderId: number): Promise<InventoryReservation[]> {
-    const order = await this.orderRepository.findById(orderId);
-
-    if (!order) {
-      throw new Error(`Order ${orderId} not found.`);
-    }
-
-    if (!order.warehouseId) {
-      throw new Error(
-        `Order ${orderId} does not have a warehouse assigned.`,
-      );
-    }
-
-    if (order.status !== "CREATED") {
-      throw new Error(
-        `Order ${orderId} cannot be reserved from status ${order.status}.`,
-      );
-    }
-
-    if (order.items.length === 0) {
-      throw new Error(`Order ${orderId} has no items.`);
-    }
-
-    const reservations = order.items.map((item) => ({
-      orderId: order.id,
-      orderItemId: item.id,
-      productId: item.productId,
-      quantity: item.quantity,
-    }));
-
-    return this.reservationRepository.reserveOrderStock(
-      reservations,
-      order.warehouseId,
+  /**
+   * Manual re-trigger for an order stuck at CREATED or OUT_OF_STOCK
+   * (e.g. orchestration never ran, or stock has since been replenished).
+   * Re-runs warehouse allocation if the order has no warehouseId yet.
+   */
+  async reserveOrder(
+    orderId: number,
+    actorUserId: number | null = null,
+  ): Promise<ReserveOrderResult> {
+    return this.reservationRepository.retryReservationForOrder(
+      orderId,
+      actorUserId,
     );
   }
 

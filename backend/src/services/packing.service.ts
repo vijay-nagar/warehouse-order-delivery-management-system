@@ -1,17 +1,33 @@
 import { PackingRepository } from "../repositories/packing.repository.js";
+import { PickingRepository } from "../repositories/picking.repository.js";
+import { HttpError } from "../utils/http-error.js";
+import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
 
 export class PackingService {
-  constructor(private readonly repository: PackingRepository) {}
+  constructor(
+    private readonly repository: PackingRepository,
+    private readonly pickingRepository = new PickingRepository(),
+  ) {}
 
   async createTask(
     orderId: number,
     pickingTaskId: number,
     notes?: string,
   ) {
-    const picking = await this.repository.findById(pickingTaskId);
+    const picking = await this.pickingRepository.findById(pickingTaskId);
 
-    if (picking) {
-      // The actual PickingTask status is verified by the controller flow.
+    if (!picking) {
+      throw new Error("Picking task not found");
+    }
+
+    if (picking.Status !== "PICKED") {
+      throw new Error(
+        "Picking task must be PICKED before a packing task can be created",
+      );
+    }
+
+    if (picking.OrderId !== orderId) {
+      throw new Error("Picking task does not belong to the order");
     }
 
     return this.repository.createTask(
@@ -37,33 +53,40 @@ export class PackingService {
     }
 
     if (task.Status !== "PENDING") {
-      throw new Error("Packing task must be in PENDING status");
+      throw new HttpError(409, "Packing task must be in PENDING status");
     }
 
     const result = await this.repository.assign(id, packerUserId);
 
     if (!result) {
-      throw new Error("Failed to assign packing task");
+      throw new HttpError(409, "Packing task must be in PENDING status");
     }
 
     return result;
   }
 
-  async startTask(id: number) {
+  async startTask(id: number, actorUserId: number) {
     const task = await this.repository.findById(id);
 
     if (!task) {
       throw new Error("Packing task not found");
     }
 
+    if (task.PackerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this packing task");
+    }
+
     if (task.Status !== "ASSIGNED") {
       throw new Error("Packing task must be in ASSIGNED status");
     }
 
-    const result = await this.repository.start(id);
+    const result = await this.repository.start(id, actorUserId);
 
     if (!result) {
-      throw new Error("Failed to start packing task");
+      throw new HttpError(
+        409,
+        "Packing task could not be started (already started or task state changed)",
+      );
     }
 
     return result;
@@ -71,12 +94,17 @@ export class PackingService {
 
   async createPackage(
     packingTaskId: number,
-    weight?: number,
+    weight: number | undefined,
+    actorUserId: number,
   ) {
     const task = await this.repository.findById(packingTaskId);
 
     if (!task) {
       throw new Error("Packing task not found");
+    }
+
+    if (task.PackerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this packing task");
     }
 
     if (task.Status !== "PACKING") {
@@ -98,11 +126,15 @@ export class PackingService {
     );
   }
 
-  async completeTask(id: number, notes?: string) {
+  async completeTask(id: number, notes: string | undefined, actorUserId: number) {
     const task = await this.repository.findById(id);
 
     if (!task) {
       throw new Error("Packing task not found");
+    }
+
+    if (task.PackerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this packing task");
     }
 
     if (task.Status !== "PACKING") {
@@ -115,11 +147,24 @@ export class PackingService {
       throw new Error("At least one package is required before completing packing");
     }
 
-    const result = await this.repository.complete(id, notes);
+    const result = await this.repository.complete(id, notes, actorUserId);
 
     if (!result) {
-      throw new Error("Failed to complete packing task");
+      throw new HttpError(
+        409,
+        "Packing task could not be completed (already completed or task state changed)",
+      );
     }
+
+    rabbitMQService
+      .publish("PACKING_COMPLETED", {
+        event: "PACKING_COMPLETED",
+        packingTaskId: result.Id,
+        orderId: result.OrderId,
+      })
+      .catch((error) =>
+        console.error("[PACKING] Failed to publish PACKING_COMPLETED:", error),
+      );
 
     return result;
   }

@@ -1,4 +1,6 @@
 import { PickingRepository } from "../repositories/picking.repository.js";
+import { HttpError } from "../utils/http-error.js";
+import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
 import type {
   AssignPickingTaskInput,
   CompletePickingTaskInput,
@@ -91,11 +93,15 @@ export class PickingService {
     return updated;
   }
 
-  async startTask(id: number) {
+  async startTask(id: number, actorUserId: number) {
     const task = await this.repository.findById(id);
 
     if (!task) {
       throw new Error("Picking task not found");
+    }
+
+    if (task.PickerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this picking task");
     }
 
     if (task.Status !== "ASSIGNED") {
@@ -104,18 +110,32 @@ export class PickingService {
       );
     }
 
-    return this.repository.start(id);
+    const result = await this.repository.start(id, actorUserId);
+
+    if (!result) {
+      throw new HttpError(
+        409,
+        "Picking task could not be started (already started or reassigned)",
+      );
+    }
+
+    return result;
   }
 
   async updatePickingItem(
     taskId: number,
     itemId: number,
     pickedQuantity: number,
+    actorUserId: number,
   ) {
     const task = await this.repository.findById(taskId);
 
     if (!task) {
       throw new Error("Picking task not found");
+    }
+
+    if (task.PickerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this picking task");
     }
 
     if (task.Status !== "PICKING") {
@@ -138,11 +158,16 @@ export class PickingService {
   async completeTask(
     id: number,
     input: CompletePickingTaskInput,
+    actorUserId: number,
   ) {
     const task = await this.repository.findById(id);
 
     if (!task) {
       throw new Error("Picking task not found");
+    }
+
+    if (task.PickerUserId !== actorUserId) {
+      throw new HttpError(403, "You are not assigned to this picking task");
     }
 
     if (task.Status !== "PICKING") {
@@ -168,6 +193,25 @@ export class PickingService {
       );
     }
 
-    return this.repository.complete(id, input.notes);
+    const result = await this.repository.complete(id, input.notes, actorUserId);
+
+    if (!result) {
+      throw new HttpError(
+        409,
+        "Picking task could not be completed (already completed or task state changed)",
+      );
+    }
+
+    rabbitMQService
+      .publish("PICKING_COMPLETED", {
+        event: "PICKING_COMPLETED",
+        pickingTaskId: result.Id,
+        orderId: result.OrderId,
+      })
+      .catch((error) =>
+        console.error("[PICKING] Failed to publish PICKING_COMPLETED:", error),
+      );
+
+    return result;
   }
 }

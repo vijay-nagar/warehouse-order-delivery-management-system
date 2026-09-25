@@ -1,4 +1,4 @@
-export type TransactionType = "IN" | "OUT" | "ADJUSTMENT";
+export type TransactionType = "IN" | "OUT" | "ADJUSTMENT" | "RETURN_RECOVERY";
 
 export interface InventoryTransaction {
   Id: number;

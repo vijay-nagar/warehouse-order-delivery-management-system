@@ -1,5 +1,6 @@
 import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
+import { recordStatusChange } from "../services/order-status.service.js";
 
 export interface PackingTaskRow {
   Id: number;
@@ -227,13 +228,17 @@ export class PackingRepository {
           INSERTED.Notes,
           INSERTED.CreatedAt,
           INSERTED.UpdatedAt
-        WHERE Id = @Id;
+        WHERE Id = @Id
+          AND Status = 'PENDING';
       `);
 
     return result.recordset[0] ?? null;
   }
 
-  async start(id: number): Promise<PackingTaskRow | null> {
+  async start(
+    id: number,
+    actorUserId: number | null = null,
+  ): Promise<PackingTaskRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
 
@@ -272,22 +277,14 @@ export class PackingRepository {
         return null;
       }
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, task.OrderId)
-        .query(`
-          UPDATE dbo.Orders
-          SET
-            Status = 'PACKING',
-            UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'PICKED';
-        `);
-
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          "Order must be in PICKED status before packing can start",
-        );
-      }
+      await recordStatusChange({
+        transaction,
+        orderId: task.OrderId,
+        fromStatus: "PICKED",
+        toStatus: "PACKING",
+        changedBy: actorUserId,
+        reason: "Packing started",
+      });
 
       await transaction.commit();
 
@@ -301,6 +298,7 @@ export class PackingRepository {
   async complete(
     id: number,
     notes?: string,
+    actorUserId: number | null = null,
   ): Promise<PackingTaskRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
@@ -342,22 +340,26 @@ export class PackingRepository {
         return null;
       }
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, task.OrderId)
+      await new sql.Request(transaction)
+        .input("PackingTaskId", sql.Int, id)
         .query(`
-          UPDATE dbo.Orders
+          UPDATE dbo.Packages
           SET
             Status = 'PACKED',
+            PackedAt = SYSUTCDATETIME(),
             UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'PACKING';
+          WHERE PackingTaskId = @PackingTaskId
+            AND Status = 'CREATED';
         `);
 
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          "Order must be in PACKING status before packing can be completed",
-        );
-      }
+      await recordStatusChange({
+        transaction,
+        orderId: task.OrderId,
+        fromStatus: "PACKING",
+        toStatus: "PACKED",
+        changedBy: actorUserId,
+        reason: "Packing completed",
+      });
 
       await transaction.commit();
 

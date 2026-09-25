@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
 
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { PickingRepository } from "../repositories/picking.repository.js";
 import { PickingService } from "../services/picking.service.js";
+import { HttpError } from "../utils/http-error.js";
 import {
   assignPickingTaskSchema,
   completePickingTaskSchema,
@@ -42,6 +44,11 @@ export const createPickingTask = async (
     });
   } catch (error) {
     console.error("Create picking task error:", error);
+
+    if (error instanceof HttpError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
 
     res.status(400).json({
       success: false,
@@ -151,6 +158,11 @@ export const assignPickingTask = async (
   } catch (error) {
     console.error("Assign picking task error:", error);
 
+    if (error instanceof HttpError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
+
     res.status(400).json({
       success: false,
       message:
@@ -162,7 +174,7 @@ export const assignPickingTask = async (
 };
 
 export const startPickingTask = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = Number(req.params.id);
@@ -175,8 +187,13 @@ export const startPickingTask = async (
     return;
   }
 
+  if (!req.user) {
+    res.status(401).json({ success: false, message: "Authentication required" });
+    return;
+  }
+
   try {
-    const task = await pickingService.startTask(id);
+    const task = await pickingService.startTask(id, req.user.userId);
 
     res.status(200).json({
       success: true,
@@ -185,6 +202,11 @@ export const startPickingTask = async (
     });
   } catch (error) {
     console.error("Start picking task error:", error);
+
+    if (error instanceof HttpError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
 
     res.status(400).json({
       success: false,
@@ -197,7 +219,7 @@ export const startPickingTask = async (
 };
 
 export const completePickingTask = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = Number(req.params.id);
@@ -223,10 +245,16 @@ export const completePickingTask = async (
     return;
   }
 
+  if (!req.user) {
+    res.status(401).json({ success: false, message: "Authentication required" });
+    return;
+  }
+
   try {
     const task = await pickingService.completeTask(
       id,
       validation.data,
+      req.user.userId,
     );
 
     res.status(200).json({
@@ -236,6 +264,11 @@ export const completePickingTask = async (
     });
   } catch (error) {
     console.error("Complete picking task error:", error);
+
+    if (error instanceof HttpError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
 
     res.status(400).json({
       success: false,
@@ -249,7 +282,7 @@ export const completePickingTask = async (
 
 
 export const updatePickingItem = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   try {
@@ -280,10 +313,16 @@ export const updatePickingItem = async (
       return;
     }
 
+    if (!req.user) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+
     const item = await pickingService.updatePickingItem(
       taskId,
       itemId,
       validation.data.pickedQuantity,
+      req.user.userId,
     );
 
     res.status(200).json({
@@ -292,6 +331,11 @@ export const updatePickingItem = async (
       data: item,
     });
   } catch (error) {
+    if (error instanceof HttpError) {
+      res.status(error.statusCode).json({ success: false, message: error.message });
+      return;
+    }
+
     if (error instanceof Error) {
       if (
         error.message === "Picking task not found" ||

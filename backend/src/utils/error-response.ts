@@ -1,5 +1,7 @@
 import type { Response } from "express";
 
+import { HttpError } from "./http-error.js";
+
 const SAFE_ERROR_PATTERNS = [
   "not found",
   "already exists",
@@ -41,6 +43,13 @@ export const sendSafeErrorResponse = (
   statusCode = 500,
 ) => {
   console.error("[API ERROR]", error);
+
+  if (error instanceof HttpError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
 
   return res.status(statusCode).json({
     success: false,

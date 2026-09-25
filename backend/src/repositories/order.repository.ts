@@ -5,6 +5,20 @@ import type {
   CreateOrderInput,
   Order,
 } from "../domain/order/order.types.js";
+import { recordInitialStatus, recordStatusChange } from "../services/order-status.service.js";
+import {
+  selectWarehouseForOrder,
+  type WarehouseAllocationShortfall,
+} from "./warehouse-allocation.repository.js";
+import { InventoryReservationRepository } from "./inventory-reservation.repository.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 interface OrderRow {
   Id: number;
@@ -32,8 +46,18 @@ interface OrderItemRow {
   CreatedAt: Date;
 }
 
+export interface CreateOrderResult {
+  order: Order;
+  shortfalls: WarehouseAllocationShortfall[];
+}
+
 export class OrderRepository {
-  async create(input: CreateOrderInput): Promise<Order> {
+  private readonly reservationRepository = new InventoryReservationRepository();
+
+  async create(
+    input: CreateOrderInput,
+    actorUserId: number | null = null,
+  ): Promise<CreateOrderResult> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
 
@@ -159,6 +183,16 @@ export class OrderRepository {
         throw new Error("Order creation failed");
       }
 
+      await recordInitialStatus({
+        transaction,
+        orderId: order.Id,
+        status: "CREATED",
+        changedBy: actorUserId,
+        reason: "Order created",
+      });
+
+      const insertedItems: Array<{ Id: number; ProductId: number; Quantity: number }> = [];
+
       for (const item of input.items) {
         const productResult = await transaction
           .request()
@@ -178,19 +212,20 @@ export class OrderRepository {
           );
         }
 
-        await transaction
+        const itemResult = await transaction
           .request()
           .input("orderId", sql.Int, order.Id)
           .input("productId", sql.Int, item.productId)
           .input("quantity", sql.Int, item.quantity)
           .input("unitPrice", sql.Decimal(18, 2), product.Price)
-          .query(`
+          .query<{ Id: number }>(`
             INSERT INTO dbo.OrderItems (
               OrderId,
               ProductId,
               Quantity,
               UnitPrice
             )
+            OUTPUT INSERTED.Id
             VALUES (
               @orderId,
               @productId,
@@ -198,6 +233,20 @@ export class OrderRepository {
               @unitPrice
             );
           `);
+
+        const insertedItem = itemResult.recordset[0];
+
+        if (!insertedItem) {
+          throw new Error(
+            `Failed to insert order item for product ${item.productId}`,
+          );
+        }
+
+        insertedItems.push({
+          Id: insertedItem.Id,
+          ProductId: item.productId,
+          Quantity: item.quantity,
+        });
       }
 
       const totalResult = await transaction
@@ -212,36 +261,127 @@ export class OrderRepository {
       const totalAmount =
         totalResult.recordset[0]?.TotalAmount ?? 0;
 
-      const updatedResult = await transaction
+      await transaction
         .request()
         .input("orderId", sql.Int, order.Id)
         .input("totalAmount", sql.Decimal(18, 2), totalAmount)
-        .query<OrderRow>(`
+        .query(`
           UPDATE dbo.Orders
           SET
             TotalAmount = @totalAmount,
             UpdatedAt = SYSUTCDATETIME()
-          OUTPUT
-            INSERTED.Id,
-            INSERTED.OrderNumber,
-            INSERTED.CustomerId,
-            INSERTED.WarehouseId,
-            INSERTED.Status,
-            INSERTED.TotalAmount,
-            INSERTED.ShippingAddressLine1,
-            INSERTED.ShippingAddressLine2,
-            INSERTED.ShippingCity,
-            INSERTED.ShippingState,
-            INSERTED.ShippingPostalCode,
-            INSERTED.CreatedAt,
-            INSERTED.UpdatedAt
           WHERE Id = @orderId;
         `);
 
-      const finalOrder = updatedResult.recordset[0];
+      // Warehouse allocation + stock reservation, atomically within this
+      // same transaction (P0-1: order creation must not result in "order
+      // created but no warehouse" / "warehouse selected but no inventory
+      // validation" / "inventory reserved but no pick task").
+      let finalWarehouseId = order.WarehouseId;
+      let shortfalls: WarehouseAllocationShortfall[] = [];
+
+      if (!finalWarehouseId) {
+        const allocation = await selectWarehouseForOrder(
+          transaction,
+          insertedItems.map((item) => ({
+            productId: item.ProductId,
+            quantity: item.Quantity,
+          })),
+        );
+
+        shortfalls = allocation.shortfalls;
+
+        if (allocation.warehouseId) {
+          finalWarehouseId = allocation.warehouseId;
+
+          await transaction
+            .request()
+            .input("orderId", sql.Int, order.Id)
+            .input("warehouseId", sql.Int, finalWarehouseId)
+            .query(`
+              UPDATE dbo.Orders
+              SET WarehouseId = @warehouseId, UpdatedAt = SYSUTCDATETIME()
+              WHERE Id = @orderId;
+            `);
+        }
+      }
+
+      if (finalWarehouseId) {
+        try {
+          const reservationInputs = insertedItems.map((item) => ({
+            orderId: order.Id,
+            orderItemId: item.Id,
+            productId: item.ProductId,
+            quantity: item.Quantity,
+          }));
+
+          await this.reservationRepository.reserveOrderStockInTransaction(
+            transaction,
+            reservationInputs,
+            finalWarehouseId,
+            actorUserId,
+          );
+        } catch (reservationError) {
+          // Stock became insufficient between the allocation scan and the
+          // reservation lock (rare race), or the client-supplied
+          // warehouseId cannot cover the order. Do not fail the whole
+          // request — fall through to OUT_OF_STOCK instead, per P0-3 (no
+          // partial reservation, but the order must still land in a
+          // defined next-action state, not an opaque 500).
+          console.error(
+            `[ORDER] Reservation failed for order ${order.Id}, moving to OUT_OF_STOCK:`,
+            reservationError,
+          );
+
+          await recordStatusChange({
+            transaction,
+            orderId: order.Id,
+            fromStatus: "CREATED",
+            toStatus: "OUT_OF_STOCK",
+            changedBy: actorUserId,
+            reason:
+              reservationError instanceof Error
+                ? reservationError.message
+                : "Insufficient stock at reservation time",
+          });
+        }
+      } else {
+        await recordStatusChange({
+          transaction,
+          orderId: order.Id,
+          fromStatus: "CREATED",
+          toStatus: "OUT_OF_STOCK",
+          changedBy: actorUserId,
+          reason: "No active warehouse has sufficient stock for all items",
+        });
+      }
+
+      const finalResult = await transaction
+        .request()
+        .input("orderId", sql.Int, order.Id)
+        .query<OrderRow>(`
+          SELECT
+            Id,
+            OrderNumber,
+            CustomerId,
+            WarehouseId,
+            Status,
+            TotalAmount,
+            ShippingAddressLine1,
+            ShippingAddressLine2,
+            ShippingCity,
+            ShippingState,
+            ShippingPostalCode,
+            CreatedAt,
+            UpdatedAt
+          FROM dbo.Orders
+          WHERE Id = @orderId;
+        `);
+
+      const finalOrder = finalResult.recordset[0];
 
       if (!finalOrder) {
-        throw new Error("Failed to update order total");
+        throw new Error("Failed to read back created order");
       }
 
       const itemsResult = await transaction
@@ -264,20 +404,136 @@ export class OrderRepository {
       await transaction.commit();
 
       return {
-        id: finalOrder.Id,
-        orderNumber: finalOrder.OrderNumber,
-        customerId: finalOrder.CustomerId,
-        warehouseId: finalOrder.WarehouseId,
-        status: finalOrder.Status as Order["status"],
-        totalAmount: finalOrder.TotalAmount,
-        shippingAddressLine1: finalOrder.ShippingAddressLine1,
-        shippingAddressLine2: finalOrder.ShippingAddressLine2,
-        shippingCity: finalOrder.ShippingCity,
-        shippingState: finalOrder.ShippingState,
-        shippingPostalCode: finalOrder.ShippingPostalCode,
-        createdAt: finalOrder.CreatedAt,
-        updatedAt: finalOrder.UpdatedAt,
-        items: itemsResult.recordset.map((item) => ({
+        order: {
+          id: finalOrder.Id,
+          orderNumber: finalOrder.OrderNumber,
+          customerId: finalOrder.CustomerId,
+          warehouseId: finalOrder.WarehouseId,
+          status: finalOrder.Status as Order["status"],
+          totalAmount: finalOrder.TotalAmount,
+          shippingAddressLine1: finalOrder.ShippingAddressLine1,
+          shippingAddressLine2: finalOrder.ShippingAddressLine2,
+          shippingCity: finalOrder.ShippingCity,
+          shippingState: finalOrder.ShippingState,
+          shippingPostalCode: finalOrder.ShippingPostalCode,
+          createdAt: finalOrder.CreatedAt,
+          updatedAt: finalOrder.UpdatedAt,
+          items: itemsResult.recordset.map((item) => ({
+            id: item.Id,
+            orderId: item.OrderId,
+            productId: item.ProductId,
+            quantity: item.Quantity,
+            unitPrice: item.UnitPrice,
+            totalPrice: item.TotalPrice,
+          })),
+        },
+        shortfalls,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async findAll(
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<Order>> {
+    const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
+
+    const countResult = await pool.request().query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount
+      FROM dbo.Orders;
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const ordersResult = await pool
+      .request()
+      .input("offset", sql.Int, offset)
+      .input("pageSize", sql.Int, pagination.pageSize)
+      .query<OrderRow>(`
+        SELECT
+          Id,
+          OrderNumber,
+          CustomerId,
+          WarehouseId,
+          Status,
+          TotalAmount,
+          ShippingAddressLine1,
+          ShippingAddressLine2,
+          ShippingCity,
+          ShippingState,
+          ShippingPostalCode,
+          CreatedAt,
+          UpdatedAt
+        FROM dbo.Orders
+        ORDER BY CreatedAt DESC, Id DESC
+        OFFSET @offset ROWS
+        FETCH NEXT @pageSize ROWS ONLY;
+      `);
+
+    const orders = ordersResult.recordset;
+
+    if (orders.length === 0) {
+      return {
+        items: [],
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalCount,
+        totalPages,
+      };
+    }
+
+    const orderIds = orders.map((order) => order.Id);
+
+    const itemsResult = await pool
+      .request()
+      .query<OrderItemRow>(`
+        SELECT
+          Id,
+          OrderId,
+          ProductId,
+          Quantity,
+          UnitPrice,
+          TotalPrice,
+          CreatedAt
+        FROM dbo.OrderItems
+        WHERE OrderId IN (${orderIds.join(",")})
+        ORDER BY OrderId, Id;
+      `);
+
+    const itemsByOrderId = new Map<number, OrderItemRow[]>();
+
+    for (const item of itemsResult.recordset) {
+      const existing = itemsByOrderId.get(item.OrderId);
+
+      if (existing) {
+        existing.push(item);
+      } else {
+        itemsByOrderId.set(item.OrderId, [item]);
+      }
+    }
+
+    const mappedOrders: Order[] = orders.map((order) => {
+      const orderItems = itemsByOrderId.get(order.Id) ?? [];
+
+      return {
+        id: order.Id,
+        orderNumber: order.OrderNumber,
+        customerId: order.CustomerId,
+        warehouseId: order.WarehouseId,
+        status: order.Status as Order["status"],
+        totalAmount: order.TotalAmount,
+        shippingAddressLine1: order.ShippingAddressLine1,
+        shippingAddressLine2: order.ShippingAddressLine2,
+        shippingCity: order.ShippingCity,
+        shippingState: order.ShippingState,
+        shippingPostalCode: order.ShippingPostalCode,
+        createdAt: order.CreatedAt,
+        updatedAt: order.UpdatedAt,
+        items: orderItems.map((item) => ({
           id: item.Id,
           orderId: item.OrderId,
           productId: item.ProductId,
@@ -286,78 +542,15 @@ export class OrderRepository {
           totalPrice: item.TotalPrice,
         })),
       };
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    }
-  }
+    });
 
-    async findAll(): Promise<Order[]> {
-    const pool = await getDatabasePool();
-
-    const ordersResult = await pool.request().query<OrderRow>(`
-      SELECT
-        Id,
-        OrderNumber,
-        CustomerId,
-        WarehouseId,
-        Status,
-        TotalAmount,
-        ShippingAddressLine1,
-        ShippingAddressLine2,
-        ShippingCity,
-        ShippingState,
-        ShippingPostalCode,
-        CreatedAt,
-        UpdatedAt
-      FROM dbo.Orders
-      ORDER BY CreatedAt DESC;
-    `);
-
-    const orders = ordersResult.recordset;
-
-    if (orders.length === 0) {
-      return [];
-    }
-
-    const itemsResult = await pool.request().query<OrderItemRow>(`
-      SELECT
-        Id,
-        OrderId,
-        ProductId,
-        Quantity,
-        UnitPrice,
-        TotalPrice,
-        CreatedAt
-      FROM dbo.OrderItems
-      ORDER BY OrderId, Id;
-    `);
-
-    return orders.map((order) => ({
-      id: order.Id,
-      orderNumber: order.OrderNumber,
-      customerId: order.CustomerId,
-      warehouseId: order.WarehouseId,
-      status: order.Status as Order["status"],
-      totalAmount: order.TotalAmount,
-      shippingAddressLine1: order.ShippingAddressLine1,
-      shippingAddressLine2: order.ShippingAddressLine2,
-      shippingCity: order.ShippingCity,
-      shippingState: order.ShippingState,
-      shippingPostalCode: order.ShippingPostalCode,
-      createdAt: order.CreatedAt,
-      updatedAt: order.UpdatedAt,
-      items: itemsResult.recordset
-        .filter((item) => item.OrderId === order.Id)
-        .map((item) => ({
-          id: item.Id,
-          orderId: item.OrderId,
-          productId: item.ProductId,
-          quantity: item.Quantity,
-          unitPrice: item.UnitPrice,
-          totalPrice: item.TotalPrice,
-        })),
-    }));
+    return {
+      items: mappedOrders,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async findById(id: number): Promise<Order | null> {
@@ -431,84 +624,5 @@ export class OrderRepository {
         totalPrice: item.TotalPrice,
       })),
     };
-  }
-
-  async updateStatus(
-    id: number,
-    status: Order["status"],
-  ): Promise<Order | null> {
-    const pool = await getDatabasePool();
-
-    const result = await pool
-      .request()
-      .input("id", sql.Int, id)
-      .input("status", sql.NVarChar(50), status)
-      .query<OrderRow>(`
-        UPDATE dbo.Orders
-        SET
-          Status = @status,
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderNumber,
-          INSERTED.CustomerId,
-          INSERTED.WarehouseId,
-          INSERTED.Status,
-          INSERTED.TotalAmount,
-          INSERTED.ShippingAddressLine1,
-          INSERTED.ShippingAddressLine2,
-          INSERTED.ShippingCity,
-          INSERTED.ShippingState,
-          INSERTED.ShippingPostalCode,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @id;
-      `);
-
-    const order = result.recordset[0];
-
-    if (!order) {
-      return null;
-    }
-
-    return this.findById(order.Id);
-  }
-
-  async cancel(id: number): Promise<Order | null> {
-    const pool = await getDatabasePool();
-
-    const result = await pool
-      .request()
-      .input("id", sql.Int, id)
-      .query<OrderRow>(`
-        UPDATE dbo.Orders
-        SET
-          Status = 'CANCELLED',
-          UpdatedAt = SYSUTCDATETIME()
-        OUTPUT
-          INSERTED.Id,
-          INSERTED.OrderNumber,
-          INSERTED.CustomerId,
-          INSERTED.WarehouseId,
-          INSERTED.Status,
-          INSERTED.TotalAmount,
-          INSERTED.ShippingAddressLine1,
-          INSERTED.ShippingAddressLine2,
-          INSERTED.ShippingCity,
-          INSERTED.ShippingState,
-          INSERTED.ShippingPostalCode,
-          INSERTED.CreatedAt,
-          INSERTED.UpdatedAt
-        WHERE Id = @id
-          AND Status = 'CREATED';
-      `);
-
-    const order = result.recordset[0];
-
-    if (!order) {
-      return null;
-    }
-
-    return this.findById(order.Id);
   }
 }

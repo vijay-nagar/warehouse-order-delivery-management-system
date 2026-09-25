@@ -3,6 +3,8 @@ import {
   createDelivery,
   getDeliveries,
   getDeliveryById,
+  getDeliveryTracking,
+  getDeliveryAttempts,
   assignDelivery,
   pickupDelivery,
   outForDelivery,
@@ -51,11 +53,28 @@ router.get(
   getDeliveryById,
 );
 
+// Get Delivery Tracking
+router.get(
+  "/:id/tracking",
+  requirePositiveIntParam("id"),
+  requirePermission("DELIVERY_VIEW"),
+  getDeliveryTracking,
+);
+
+// Get Delivery Attempts
+router.get(
+  "/:id/attempts",
+  requirePositiveIntParam("id"),
+  requirePermission("DELIVERY_VIEW"),
+  getDeliveryAttempts,
+);
+
 // Assign Delivery
 router.post(
   "/:id/assign",
   requirePositiveIntParam("id"),
   requirePermission("DELIVERY_ASSIGN"),
+  requireRoles("Delivery Boy"),
   assignDelivery,
 );
 

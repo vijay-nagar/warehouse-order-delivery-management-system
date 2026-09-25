@@ -1,16 +1,21 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
 
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import type { CreateOrderInput } from "../domain/order/order.types.js";
 import { OrderRepository } from "../repositories/order.repository.js";
 import { OrderService } from "../services/order.service.js";
 import { createOrderSchema } from "../validators/order.validator.js";
+import { redisService } from "../infrastructure/redis/redis.service.js";
+import { parsePagination } from "../shared/pagination/pagination.js";
 
 const orderService = new OrderService(
   new OrderRepository(),
 );
 
+const IDEMPOTENCY_TTL_SECONDS = 86400;
+
 export const createOrder = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const validation = createOrderSchema.safeParse(req.body);
@@ -25,7 +30,46 @@ export const createOrder = async (
     return;
   }
 
+  const idempotencyKey = req.header("Idempotency-Key");
+  const idempotencyRedisKey = idempotencyKey
+    ? `order:idem:${idempotencyKey}`
+    : null;
+
   try {
+    if (idempotencyRedisKey) {
+      const claimed = await redisService.setIfNotExists(
+        idempotencyRedisKey,
+        "PENDING",
+        IDEMPOTENCY_TTL_SECONDS,
+      );
+
+      if (!claimed) {
+        const existing = await redisService.get(idempotencyRedisKey);
+        const existingOrderId = existing ? Number(existing) : NaN;
+
+        if (Number.isInteger(existingOrderId)) {
+          const existingOrder = await orderService.getOrderById(existingOrderId);
+
+          if (existingOrder) {
+            res.status(200).json({
+              success: true,
+              message: "Order already created for this idempotency key",
+              data: existingOrder,
+            });
+
+            return;
+          }
+        }
+
+        res.status(409).json({
+          success: false,
+          message: "A request with this idempotency key is already in progress",
+        });
+
+        return;
+      }
+    }
+
     const input: CreateOrderInput = {
       customerId: validation.data.customerId,
       shippingAddressLine1: validation.data.shippingAddressLine1,
@@ -41,7 +85,18 @@ export const createOrder = async (
         : {}),
     };
 
-    const order = await orderService.createOrder(input);
+    const order = await orderService.createOrder(
+      input,
+      req.user?.userId ?? null,
+    );
+
+    if (idempotencyRedisKey) {
+      await redisService.set(
+        idempotencyRedisKey,
+        String(order.id),
+        IDEMPOTENCY_TTL_SECONDS,
+      );
+    }
 
     res.status(201).json({
       success: true,
@@ -49,6 +104,12 @@ export const createOrder = async (
       data: order,
     });
   } catch (error) {
+    if (idempotencyRedisKey) {
+      await redisService.delete(idempotencyRedisKey).catch(() => {
+        // Best-effort cleanup so the key can be retried.
+      });
+    }
+
     if (error instanceof Error) {
       res.status(400).json({
         success: false,
@@ -66,11 +127,16 @@ export const createOrder = async (
 };
 
 export const getOrders = async (
-  _req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   try {
-    const orders = await orderService.getOrders();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
+    const orders = await orderService.getOrders(pagination);
 
     res.status(200).json({
       success: true,
@@ -85,7 +151,7 @@ export const getOrders = async (
 };
 
 export const getOrderById = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = Number(req.params.id);
@@ -124,7 +190,7 @@ export const getOrderById = async (
 };
 
 export const cancelOrder = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = Number(req.params.id);
@@ -139,7 +205,7 @@ export const cancelOrder = async (
   }
 
   try {
-    const order = await orderService.cancelOrder(id);
+    const order = await orderService.cancelOrder(id, req.user?.userId ?? null);
 
     if (!order) {
       res.status(400).json({

@@ -45,6 +45,28 @@ export class RedisService {
     await redisClient.set(key, value);
   }
 
+  /**
+   * Atomically claims `key` only if it does not already exist (SET NX EX).
+   * Returns true if this call claimed it, false if another caller already
+   * holds it. Used for request idempotency (e.g. double-click order
+   * creation) without adding any new infrastructure beyond the existing
+   * Redis client.
+   */
+  async setIfNotExists(
+    key: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    await this.connect();
+
+    const result = await redisClient.set(key, value, {
+      NX: true,
+      EX: ttlSeconds,
+    });
+
+    return result === "OK";
+  }
+
   async delete(key: string): Promise<void> {
     await this.connect();
 

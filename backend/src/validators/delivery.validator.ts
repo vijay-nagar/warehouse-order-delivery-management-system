@@ -18,7 +18,8 @@ export const returnSchema = z.object({
 });
 
 export const trackingSchema = z.object({
-  status: z.enum(["PICKED_UP", "OUT_FOR_DELIVERY"]),
+  // Status is derived server-side from the delivery's current state
+  // (see DeliveryService.addTracking), not client-supplied.
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
   remarks: z.string().max(500).optional(),

@@ -109,4 +109,25 @@ export class UserRepository {
     return result.recordset.length > 0;
   }
 
+  async hasRole(userId: number, roleName: string): Promise<boolean> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .input("roleName", sql.NVarChar(100), roleName)
+      .query<{ HasRole: number }>(`
+        SELECT TOP 1
+          1 AS HasRole
+        FROM dbo.UserRoles ur
+        INNER JOIN dbo.Roles r
+          ON r.Id = ur.RoleId
+        WHERE ur.UserId = @userId
+          AND r.Name = @roleName
+          AND r.IsActive = 1;
+      `);
+
+    return result.recordset.length > 0;
+  }
+
 }

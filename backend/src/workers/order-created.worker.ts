@@ -6,11 +6,13 @@ const startOrderCreatedWorker = async (): Promise<void> => {
     async (message) => {
       console.log("[WORKER] ORDER_CREATED event received:", message);
 
-      // Future processing will go here:
-      // inventory reservation
-      // warehouse selection
-      // pick-list generation
-      // notifications, etc.
+      // Warehouse selection, inventory reservation, and pick-task
+      // generation now happen synchronously inside
+      // OrderRepository.create()'s own transaction (see
+      // src/repositories/order.repository.ts), so the order is never left
+      // waiting on this consumer. This handler is retained only as a
+      // passive audit/log point for ORDER_CREATED events, not a workflow
+      // trigger.
     },
   );
 

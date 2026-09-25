@@ -2,6 +2,7 @@ import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
 import { PackingRepository } from "./packing.repository.js";
+import { recordStatusChange } from "../services/order-status.service.js";
 
 export interface PickingTaskRow {
   Id: number;
@@ -285,7 +286,10 @@ export class PickingRepository {
     return result.recordset[0] ?? null;
   }
 
-  async start(id: number): Promise<PickingTaskRow | null> {
+  async start(
+    id: number,
+    actorUserId: number | null = null,
+  ): Promise<PickingTaskRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
 
@@ -323,22 +327,14 @@ export class PickingRepository {
         return null;
       }
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, task.OrderId)
-        .query(`
-          UPDATE dbo.Orders
-          SET
-            Status = 'PICKING',
-            UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'STOCK_RESERVED';
-        `);
-
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          "Order must be in STOCK_RESERVED status before picking can start",
-        );
-      }
+      await recordStatusChange({
+        transaction,
+        orderId: task.OrderId,
+        fromStatus: "STOCK_RESERVED",
+        toStatus: "PICKING",
+        changedBy: actorUserId,
+        reason: "Picking started",
+      });
 
       await transaction.commit();
 
@@ -396,6 +392,7 @@ export class PickingRepository {
   async complete(
     id: number,
     notes?: string,
+    actorUserId: number | null = null,
   ): Promise<PickingTaskRow | null> {
     const pool = await getDatabasePool();
     const transaction = new sql.Transaction(pool);
@@ -491,22 +488,14 @@ export class PickingRepository {
         }
       }
 
-      const orderResult = await new sql.Request(transaction)
-        .input("OrderId", sql.Int, task.OrderId)
-        .query(`
-          UPDATE dbo.Orders
-          SET
-            Status = 'PICKED',
-            UpdatedAt = SYSUTCDATETIME()
-          WHERE Id = @OrderId
-            AND Status = 'PICKING';
-        `);
-
-      if (orderResult.rowsAffected[0] !== 1) {
-        throw new Error(
-          `Order ${task.OrderId} could not be moved from PICKING to PICKED.`,
-        );
-      }
+      await recordStatusChange({
+        transaction,
+        orderId: task.OrderId,
+        fromStatus: "PICKING",
+        toStatus: "PICKED",
+        changedBy: actorUserId,
+        reason: "Picking completed",
+      });
 
       const packingRepository = new PackingRepository();
 
