@@ -11,6 +11,7 @@ import type {
   CreateWarehouseInput,
   UpdateWarehouseInput,
 } from "../validators/warehouse.validator.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export const createWarehouseService = async (
   input: CreateWarehouseInput,
@@ -24,8 +25,11 @@ export const createWarehouseService = async (
   return createWarehouse(input);
 };
 
-export const getAllWarehousesService = async () => {
-  return getAllWarehouses();
+export const getAllWarehousesService = async (
+  pagination: PaginationRequest,
+  search?: string,
+) => {
+  return getAllWarehouses(pagination, search);
 };
 
 export const getWarehouseByIdService = async (id: number) => {

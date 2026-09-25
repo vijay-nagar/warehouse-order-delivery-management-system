@@ -5,6 +5,10 @@ import type {
 } from "../domain/products/product.types.js";
 
 import { ProductRepository } from "../repositories/product.repository.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export class ProductService {
   constructor(
@@ -24,8 +28,11 @@ export class ProductService {
     return this.productRepository.create(input);
   }
 
-  async getProducts(): Promise<Product[]> {
-    return this.productRepository.findAll();
+  async getProducts(
+    pagination: PaginationRequest,
+    search?: string,
+  ): Promise<PaginationResult<Product>> {
+    return this.productRepository.findAll(pagination, search);
   }
 
   async getProductById(id: number): Promise<Product | null> {

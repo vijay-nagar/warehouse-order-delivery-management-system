@@ -12,6 +12,7 @@ import {
   createBinSchema,
   updateBinSchema,
 } from "../validators/bin.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 // Create Bin
 export const createBin = async (
@@ -62,15 +63,29 @@ export const createBin = async (
 
 // Get All Bins
 export const getAllBins = async (
-  _req: Request,
+  req: Request,
   res: Response
 ) => {
   try {
-    const bins = await getAllBinsService();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const shelfIdParam = req.query.shelfId;
+    const shelfId =
+      typeof shelfIdParam === "string" && Number.isInteger(Number(shelfIdParam))
+        ? Number(shelfIdParam)
+        : undefined;
+
+    const bins = await getAllBinsService(
+      pagination,
+      shelfId !== undefined ? { shelfId } : undefined,
+    );
 
     return res.status(200).json({
       success: true,
-      data: bins,
+      data: bins.items,
+      pagination: toPaginationMeta(bins),
     });
   } catch (error) {
     console.error("Get all bins error:", error);

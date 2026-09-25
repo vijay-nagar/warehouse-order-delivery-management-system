@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 import type {
   CreateCustomerInput,
   Customer,
   UpdateCustomerInput,
 } from "../domain/customers/customer.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 interface CustomerRow {
   Id: number;
@@ -110,12 +118,36 @@ export class CustomerRepository {
     return mapCustomer(row);
   }
 
-  async findAll(): Promise<Customer[]> {
+  async findAll(
+    pagination: PaginationRequest,
+    search?: string,
+  ): Promise<PaginationResult<Customer>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const result = await pool
+    const searchClause = search
+      ? "AND (Name LIKE @Search OR Phone LIKE @Search OR Email LIKE @Search)"
+      : "";
+
+    const countRequest = pool.request();
+    if (search) countRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+    const countResult = await countRequest.query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount
+      FROM dbo.Customers
+      WHERE IsActive = 1 ${searchClause};
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const listRequest = pool
       .request()
-      .query<CustomerRow>(`
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize);
+    if (search) listRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+    const result = await listRequest.query<CustomerRow>(`
         SELECT
           Id,
           Name,
@@ -130,11 +162,18 @@ export class CustomerRepository {
           CreatedAt,
           UpdatedAt
         FROM dbo.Customers
-        WHERE IsActive = 1
-        ORDER BY Id DESC;
+        WHERE IsActive = 1 ${searchClause}
+        ORDER BY Id DESC
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
       `);
 
-    return result.recordset.map(mapCustomer);
+    return {
+      items: result.recordset.map(mapCustomer),
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async findById(id: number): Promise<Customer | null> {

@@ -12,6 +12,7 @@ import type {
   CreateBinInput,
   UpdateBinInput,
 } from "../domain/warehouse/bin.types.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export const createBinService = async (
   data: CreateBinInput
@@ -34,8 +35,11 @@ export const createBinService = async (
   return createBin(data);
 };
 
-export const getAllBinsService = async () => {
-  return getAllBins();
+export const getAllBinsService = async (
+  pagination: PaginationRequest,
+  filters?: { shelfId?: number },
+) => {
+  return getAllBins(pagination, filters);
 };
 
 export const getBinByIdService = async (id: number) => {

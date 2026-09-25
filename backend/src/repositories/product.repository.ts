@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 import type {
   CreateProductInput,
   Product,
   UpdateProductInput,
 } from "../domain/products/product.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 interface ProductRow {
   Id: number;
@@ -78,12 +86,34 @@ export class ProductRepository {
     return mapProduct(row);
   }
 
-  async findAll(): Promise<Product[]> {
+  async findAll(
+    pagination: PaginationRequest,
+    search?: string,
+  ): Promise<PaginationResult<Product>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const result = await pool
+    const searchClause = search ? "AND (Name LIKE @Search OR SKU LIKE @Search)" : "";
+
+    const countRequest = pool.request();
+    if (search) countRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+    const countResult = await countRequest.query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount
+      FROM dbo.Products
+      WHERE IsActive = 1 ${searchClause};
+    `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+    const listRequest = pool
       .request()
-      .query<ProductRow>(`
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize);
+    if (search) listRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+    const result = await listRequest.query<ProductRow>(`
         SELECT
           Id,
           Name,
@@ -94,11 +124,18 @@ export class ProductRepository {
           CreatedAt,
           UpdatedAt
         FROM dbo.Products
-        WHERE IsActive = 1
-        ORDER BY Id DESC;
+        WHERE IsActive = 1 ${searchClause}
+        ORDER BY Id DESC
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
       `);
 
-    return result.recordset.map(mapProduct);
+    return {
+      items: result.recordset.map(mapProduct),
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async findById(id: number): Promise<Product | null> {

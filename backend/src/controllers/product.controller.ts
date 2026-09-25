@@ -6,6 +6,7 @@ import {
   createProductSchema,
   updateProductSchema,
 } from "../validators/product.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 const productService = new ProductService(
   new ProductRepository(),
@@ -62,15 +63,23 @@ export const createProduct = async (
 };
 
 export const getProducts = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const products = await productService.getProducts();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const search =
+      typeof req.query.search === "string" ? req.query.search : undefined;
+
+    const products = await productService.getProducts(pagination, search);
 
     res.status(200).json({
       success: true,
-      data: products,
+      data: products.items,
+      pagination: toPaginationMeta(products),
     });
   } catch {
     res.status(500).json({

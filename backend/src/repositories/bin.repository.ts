@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 
 import type {
   CreateBinInput,
   UpdateBinInput,
 } from "../domain/warehouse/bin.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 // Check whether shelf exists
 export const shelfExists = async (
@@ -67,16 +75,50 @@ export const createBin = async (
 };
 
 // Get all bins
-export const getAllBins = async () => {
+export const getAllBins = async (
+  pagination: PaginationRequest,
+  filters?: { shelfId?: number },
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const result = await pool.request().query(`
-    SELECT *
-    FROM Bins
-    ORDER BY Id DESC
+  const whereClause = filters?.shelfId !== undefined ? "WHERE ShelfId = @ShelfId" : "";
+
+  const countRequest = pool.request();
+  if (filters?.shelfId !== undefined) {
+    countRequest.input("ShelfId", sql.Int, filters.shelfId);
+  }
+
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS TotalCount FROM Bins ${whereClause}
   `);
 
-  return result.recordset;
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+  const listRequest = pool
+    .request()
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize);
+  if (filters?.shelfId !== undefined) {
+    listRequest.input("ShelfId", sql.Int, filters.shelfId);
+  }
+
+  const result = await listRequest.query(`
+    SELECT *
+    FROM Bins
+    ${whereClause}
+    ORDER BY Id DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY
+  `);
+
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };
 
 // Get bin by ID

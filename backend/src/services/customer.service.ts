@@ -4,6 +4,10 @@ import type {
   UpdateCustomerInput,
 } from "../domain/customers/customer.types.js";
 import { CustomerRepository } from "../repositories/customer.repository.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export class CustomerService {
   constructor(
@@ -23,8 +27,11 @@ export class CustomerService {
     return this.customerRepository.create(input);
   }
 
-  async getCustomers(): Promise<Customer[]> {
-    return this.customerRepository.findAll();
+  async getCustomers(
+    pagination: PaginationRequest,
+    search?: string,
+  ): Promise<PaginationResult<Customer>> {
+    return this.customerRepository.findAll(pagination, search);
   }
 
   async getCustomerById(

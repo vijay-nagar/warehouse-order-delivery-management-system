@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 
 import type {
   CreateZoneInput,
   UpdateZoneInput,
 } from "../validators/zone.validator.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 // Find Zone by Warehouse and Code
 export const findZoneByWarehouseAndCode = async (
@@ -89,10 +97,36 @@ export const createZone = async (
 };
 
 // Get All Zones
-export const getAllZones = async () => {
+export const getAllZones = async (
+  pagination: PaginationRequest,
+  filters?: { warehouseId?: number },
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const result = await pool.request().query(`
+  const whereClause = filters?.warehouseId !== undefined ? "WHERE WarehouseId = @WarehouseId" : "";
+
+  const countRequest = pool.request();
+  if (filters?.warehouseId !== undefined) {
+    countRequest.input("WarehouseId", sql.Int, filters.warehouseId);
+  }
+
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS TotalCount FROM Zones ${whereClause};
+  `);
+
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+  const listRequest = pool
+    .request()
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize);
+  if (filters?.warehouseId !== undefined) {
+    listRequest.input("WarehouseId", sql.Int, filters.warehouseId);
+  }
+
+  const result = await listRequest.query(`
     SELECT
       Id,
       WarehouseId,
@@ -102,10 +136,18 @@ export const getAllZones = async () => {
       CreatedAt,
       UpdatedAt
     FROM Zones
-    ORDER BY Id DESC;
+    ${whereClause}
+    ORDER BY Id DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
   `);
 
-  return result.recordset;
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };
 
 // Get Zone by ID

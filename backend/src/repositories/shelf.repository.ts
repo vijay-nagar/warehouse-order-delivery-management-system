@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 
 import type {
   CreateShelfInput,
   UpdateShelfInput,
 } from "../domain/warehouse/shelf.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 // Check whether zone exists
 export const zoneExists = async (
@@ -67,16 +75,50 @@ export const createShelf = async (
 };
 
 // Get all shelves
-export const getAllShelves = async () => {
+export const getAllShelves = async (
+  pagination: PaginationRequest,
+  filters?: { zoneId?: number },
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const result = await pool.request().query(`
-    SELECT *
-    FROM Shelves
-    ORDER BY Id DESC
+  const whereClause = filters?.zoneId !== undefined ? "WHERE ZoneId = @ZoneId" : "";
+
+  const countRequest = pool.request();
+  if (filters?.zoneId !== undefined) {
+    countRequest.input("ZoneId", sql.Int, filters.zoneId);
+  }
+
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS TotalCount FROM Shelves ${whereClause}
   `);
 
-  return result.recordset;
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+  const listRequest = pool
+    .request()
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize);
+  if (filters?.zoneId !== undefined) {
+    listRequest.input("ZoneId", sql.Int, filters.zoneId);
+  }
+
+  const result = await listRequest.query(`
+    SELECT *
+    FROM Shelves
+    ${whereClause}
+    ORDER BY Id DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY
+  `);
+
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };
 
 // Get shelf by ID

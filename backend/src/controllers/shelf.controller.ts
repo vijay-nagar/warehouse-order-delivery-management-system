@@ -12,6 +12,7 @@ import {
   createShelfSchema,
   updateShelfSchema,
 } from "../validators/shelf.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 // Create Shelf
 export const createShelf = async (
@@ -62,15 +63,29 @@ export const createShelf = async (
 
 // Get All Shelves
 export const getAllShelves = async (
-  _req: Request,
+  req: Request,
   res: Response
 ) => {
   try {
-    const shelves = await getAllShelvesService();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const zoneIdParam = req.query.zoneId;
+    const zoneId =
+      typeof zoneIdParam === "string" && Number.isInteger(Number(zoneIdParam))
+        ? Number(zoneIdParam)
+        : undefined;
+
+    const shelves = await getAllShelvesService(
+      pagination,
+      zoneId !== undefined ? { zoneId } : undefined,
+    );
 
     return res.status(200).json({
       success: true,
-      data: shelves,
+      data: shelves.items,
+      pagination: toPaginationMeta(shelves),
     });
   } catch (error) {
     console.error("Get all shelves error:", error);

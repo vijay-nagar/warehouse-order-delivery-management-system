@@ -12,6 +12,7 @@ import {
   createWarehouseSchema,
   updateWarehouseSchema,
 } from "../validators/warehouse.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 export const createWarehouse = async (
   req: Request,
@@ -56,15 +57,23 @@ export const createWarehouse = async (
 };
 
 export const getAllWarehouses = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ) => {
   try {
-    const warehouses = await getAllWarehousesService();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const search =
+      typeof req.query.search === "string" ? req.query.search : undefined;
+
+    const warehouses = await getAllWarehousesService(pagination, search);
 
     return res.status(200).json({
       success: true,
-      data: warehouses,
+      data: warehouses.items,
+      pagination: toPaginationMeta(warehouses),
     });
   } catch (error) {
     console.error("Get warehouses error:", error);

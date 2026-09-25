@@ -12,6 +12,7 @@ import type {
   CreateZoneInput,
   UpdateZoneInput,
 } from "../validators/zone.validator.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 // Create Zone
 export const createZoneService = async (
@@ -40,8 +41,11 @@ export const createZoneService = async (
 };
 
 // Get All Zones
-export const getAllZonesService = async () => {
-  return getAllZones();
+export const getAllZonesService = async (
+  pagination: PaginationRequest,
+  filters?: { warehouseId?: number },
+) => {
+  return getAllZones(pagination, filters);
 };
 
 // Get Zone by ID

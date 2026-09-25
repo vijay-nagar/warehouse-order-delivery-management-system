@@ -12,6 +12,7 @@ import {
   createZoneSchema,
   updateZoneSchema,
 } from "../validators/zone.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 // Create Zone
 export const createZone = async (
@@ -64,15 +65,29 @@ export const createZone = async (
 
 // Get All Zones
 export const getAllZones = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ) => {
   try {
-    const zones = await getAllZonesService();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const warehouseIdParam = req.query.warehouseId;
+    const warehouseId =
+      typeof warehouseIdParam === "string" && Number.isInteger(Number(warehouseIdParam))
+        ? Number(warehouseIdParam)
+        : undefined;
+
+    const zones = await getAllZonesService(
+      pagination,
+      warehouseId !== undefined ? { warehouseId } : undefined,
+    );
 
     return res.status(200).json({
       success: true,
-      data: zones,
+      data: zones.items,
+      pagination: toPaginationMeta(zones),
     });
   } catch (error) {
     console.error("Get zones error:", error);

@@ -1,5 +1,13 @@
 import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 import type {
   CreateWarehouseInput,
@@ -86,10 +94,32 @@ export const createWarehouse = async (
   return result.recordset[0];
 };
 
-export const getAllWarehouses = async () => {
+export const getAllWarehouses = async (
+  pagination: PaginationRequest,
+  search?: string,
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const result = await pool.request().query(`
+  const searchClause = search ? "WHERE Name LIKE @Search OR Code LIKE @Search" : "";
+
+  const countRequest = pool.request();
+  if (search) countRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS TotalCount FROM Warehouses ${searchClause};
+  `);
+
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+  const listRequest = pool
+    .request()
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize);
+  if (search) listRequest.input("Search", sql.NVarChar(250), `%${search}%`);
+
+  const result = await listRequest.query(`
     SELECT
       Id,
       Name,
@@ -103,10 +133,18 @@ export const getAllWarehouses = async () => {
       CreatedAt,
       UpdatedAt
     FROM Warehouses
-    ORDER BY Id DESC;
+    ${searchClause}
+    ORDER BY Id DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
   `);
 
-  return result.recordset;
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };
 
 export const getWarehouseById = async (id: number) => {

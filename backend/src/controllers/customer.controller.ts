@@ -6,6 +6,7 @@ import {
   createCustomerSchema,
   updateCustomerSchema,
 } from "../validators/customer.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 const customerService = new CustomerService(
   new CustomerRepository(),
@@ -66,16 +67,27 @@ export const createCustomer = async (
 };
 
 export const getCustomers = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
   try {
-    const customers =
-      await customerService.getCustomers();
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const search =
+      typeof req.query.search === "string" ? req.query.search : undefined;
 
-    res.status(200).json(customers);
+    const customers = await customerService.getCustomers(pagination, search);
+
+    res.status(200).json({
+      success: true,
+      data: customers.items,
+      pagination: toPaginationMeta(customers),
+    });
   } catch {
     res.status(500).json({
+      success: false,
       message: "Failed to fetch customers",
     });
   }

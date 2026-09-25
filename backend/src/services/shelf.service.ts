@@ -12,6 +12,7 @@ import type {
   CreateShelfInput,
   UpdateShelfInput,
 } from "../domain/warehouse/shelf.types.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export const createShelfService = async (
   data: CreateShelfInput
@@ -34,8 +35,11 @@ export const createShelfService = async (
   return createShelf(data);
 };
 
-export const getAllShelvesService = async () => {
-  return getAllShelves();
+export const getAllShelvesService = async (
+  pagination: PaginationRequest,
+  filters?: { zoneId?: number },
+) => {
+  return getAllShelves(pagination, filters);
 };
 
 export const getShelfByIdService = async (
