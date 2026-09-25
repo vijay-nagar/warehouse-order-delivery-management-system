@@ -13,4 +13,5 @@ export interface InventoryReservation {
   status: InventoryReservationStatus;
   createdAt: Date;
   updatedAt: Date | null;
+  binId?: number | null;
 }

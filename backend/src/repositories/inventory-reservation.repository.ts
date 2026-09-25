@@ -2,6 +2,7 @@ import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
 import { PickingRepository } from "./picking.repository.js";
 import { recordStatusChange } from "../services/order-status.service.js";
+import { insertInventoryTransactionInTransaction } from "./inventory-transaction.repository.js";
 import {
   selectWarehouseForOrder,
   type WarehouseAllocationShortfall,
@@ -57,6 +58,7 @@ export class InventoryReservationRepository {
         SELECT
           Id,
           ProductId,
+          BinId,
           AvailableQuantity,
           ReservedQuantity,
           IsActive
@@ -96,6 +98,20 @@ export class InventoryReservationRepository {
           UpdatedAt = SYSUTCDATETIME()
         WHERE Id = @inventoryId;
       `);
+
+      await insertInventoryTransactionInTransaction(transaction, {
+        inventoryId: inventory.Id,
+        transactionType: "RESERVE",
+        quantity: reservation.quantity,
+        previousQuantity: inventory.AvailableQuantity,
+        newQuantity: inventory.AvailableQuantity - reservation.quantity,
+        orderId: reservation.orderId,
+        orderItemId: reservation.orderItemId,
+        referenceType: "ORDER",
+        referenceId: reservation.orderId,
+        userId: actorUserId,
+        binId: inventory.BinId,
+      });
 
       const insertRequest = new sql.Request(transaction);
 
@@ -148,6 +164,7 @@ export class InventoryReservationRepository {
         status: row.Status as InventoryReservationStatus,
         createdAt: row.CreatedAt,
         updatedAt: row.UpdatedAt,
+        binId: inventory.BinId as number | null,
       });
     }
 
@@ -163,6 +180,7 @@ export class InventoryReservationRepository {
         pickingTaskId,
         reservation.productId,
         reservation.quantity,
+        reservation.binId,
       );
     }
 
@@ -373,6 +391,22 @@ export class InventoryReservationRepository {
     try {
       await transaction.begin();
 
+      const orderResult = await new sql.Request(transaction)
+        .input("OrderId", sql.Int, orderId)
+        .query<{ Status: string }>(`
+          SELECT Status
+          FROM dbo.Orders WITH (UPDLOCK, ROWLOCK)
+          WHERE Id = @OrderId;
+        `);
+
+      const orderRow = orderResult.recordset[0];
+
+      if (!orderRow) {
+        throw new Error(`Order ${orderId} not found.`);
+      }
+
+      const currentStatus = orderRow.Status as OrderStatus;
+
       const reservationRequest = new sql.Request(transaction)
         .input("OrderId", sql.Int, orderId);
 
@@ -397,6 +431,10 @@ export class InventoryReservationRepository {
             AvailableQuantity = AvailableQuantity + @Quantity,
             ReservedQuantity = ReservedQuantity - @Quantity,
             UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.BinId,
+            DELETED.AvailableQuantity AS PreviousAvailableQuantity,
+            INSERTED.AvailableQuantity AS NewAvailableQuantity
           WHERE Id = @InventoryId
             AND ReservedQuantity >= @Quantity;
         `);
@@ -406,6 +444,22 @@ export class InventoryReservationRepository {
             `Inventory ${reservation.InventoryId} cannot release quantity ${reservation.Quantity}.`,
           );
         }
+
+        const releasedInventory = inventoryResult.recordset[0];
+
+        await insertInventoryTransactionInTransaction(transaction, {
+          inventoryId: reservation.InventoryId,
+          transactionType: "RELEASE",
+          quantity: reservation.Quantity,
+          previousQuantity: releasedInventory.PreviousAvailableQuantity,
+          newQuantity: releasedInventory.NewAvailableQuantity,
+          orderId,
+          referenceType: "ORDER",
+          referenceId: orderId,
+          userId: actorUserId,
+          binId: releasedInventory.BinId,
+          remarks: "Order cancelled",
+        });
 
         const reservationUpdate = new sql.Request(transaction)
           .input("ReservationId", sql.Int, reservation.Id);
@@ -429,7 +483,7 @@ export class InventoryReservationRepository {
       await recordStatusChange({
         transaction,
         orderId,
-        fromStatus: "CREATED",
+        fromStatus: currentStatus,
         toStatus: "CANCELLED",
         changedBy: actorUserId,
         reason: "Order cancelled",
@@ -492,7 +546,10 @@ export class InventoryReservationRepository {
             ReservedQuantity = ReservedQuantity - @quantity,
             UpdatedAt = SYSUTCDATETIME()
           OUTPUT
-            INSERTED.Id
+            INSERTED.Id,
+            INSERTED.BinId,
+            DELETED.AvailableQuantity AS PreviousAvailableQuantity,
+            INSERTED.AvailableQuantity AS NewAvailableQuantity
           WHERE Id = @inventoryId
             AND ReservedQuantity >= @quantity;
         `);
@@ -502,6 +559,21 @@ export class InventoryReservationRepository {
             `Inventory ${reservation.InventoryId} cannot release quantity ${reservation.Quantity}.`,
           );
         }
+
+        const releasedInventory = inventoryResult.recordset[0];
+
+        await insertInventoryTransactionInTransaction(transaction, {
+          inventoryId: reservation.InventoryId,
+          transactionType: "RELEASE",
+          quantity: reservation.Quantity,
+          previousQuantity: releasedInventory.PreviousAvailableQuantity,
+          newQuantity: releasedInventory.NewAvailableQuantity,
+          orderId: reservation.OrderId,
+          orderItemId: reservation.OrderItemId,
+          referenceType: "ORDER",
+          referenceId: reservation.OrderId,
+          binId: releasedInventory.BinId,
+        });
 
         const updateReservationRequest = new sql.Request(transaction);
 
@@ -583,7 +655,10 @@ export class InventoryReservationRepository {
             ReservedQuantity = ReservedQuantity - @quantity,
             UpdatedAt = SYSUTCDATETIME()
           OUTPUT
-            INSERTED.Id
+            INSERTED.Id,
+            INSERTED.BinId,
+            DELETED.ReservedQuantity AS PreviousReservedQuantity,
+            INSERTED.ReservedQuantity AS NewReservedQuantity
           WHERE Id = @inventoryId
             AND ReservedQuantity >= @quantity;
         `);
@@ -593,6 +668,21 @@ export class InventoryReservationRepository {
             `Inventory ${reservation.InventoryId} cannot consume quantity ${reservation.Quantity}.`,
           );
         }
+
+        const consumedInventory = inventoryResult.recordset[0];
+
+        await insertInventoryTransactionInTransaction(transaction, {
+          inventoryId: reservation.InventoryId,
+          transactionType: "PICK_CONSUME",
+          quantity: reservation.Quantity,
+          previousQuantity: consumedInventory.PreviousReservedQuantity,
+          newQuantity: consumedInventory.NewReservedQuantity,
+          orderId: reservation.OrderId,
+          orderItemId: reservation.OrderItemId,
+          referenceType: "ORDER",
+          referenceId: reservation.OrderId,
+          binId: consumedInventory.BinId,
+        });
 
         const updateReservationRequest = new sql.Request(transaction);
 

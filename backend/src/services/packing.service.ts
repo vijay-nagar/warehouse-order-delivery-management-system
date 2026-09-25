@@ -1,5 +1,6 @@
 import { PackingRepository } from "../repositories/packing.repository.js";
 import { PickingRepository } from "../repositories/picking.repository.js";
+import { UserRepository } from "../repositories/user.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
 
@@ -7,6 +8,7 @@ export class PackingService {
   constructor(
     private readonly repository: PackingRepository,
     private readonly pickingRepository = new PickingRepository(),
+    private readonly userRepository = new UserRepository(),
   ) {}
 
   async createTask(
@@ -54,6 +56,15 @@ export class PackingService {
 
     if (task.Status !== "PENDING") {
       throw new HttpError(409, "Packing task must be in PENDING status");
+    }
+
+    const [isActive, hasRole] = await Promise.all([
+      this.userRepository.isActive(packerUserId),
+      this.userRepository.hasRole(packerUserId, "Packer"),
+    ]);
+
+    if (!isActive || !hasRole) {
+      throw new HttpError(400, "Target user is not an active Packer");
     }
 
     const result = await this.repository.assign(id, packerUserId);

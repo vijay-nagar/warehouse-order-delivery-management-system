@@ -1,4 +1,5 @@
 import { PickingRepository } from "../repositories/picking.repository.js";
+import { UserRepository } from "../repositories/user.repository.js";
 import { HttpError } from "../utils/http-error.js";
 import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
 import type {
@@ -10,6 +11,7 @@ import type {
 export class PickingService {
   constructor(
     private readonly repository: PickingRepository,
+    private readonly userRepository = new UserRepository(),
   ) {}
 
   async createTask(input: CreatePickingTaskInput) {
@@ -85,6 +87,15 @@ export class PickingService {
       );
     }
 
+    const [isActive, hasRole] = await Promise.all([
+      this.userRepository.isActive(input.pickerUserId),
+      this.userRepository.hasRole(input.pickerUserId, "Picker"),
+    ]);
+
+    if (!isActive || !hasRole) {
+      throw new HttpError(400, "Target user is not an active Picker");
+    }
+
     const updated = await this.repository.assign(
       id,
       input.pickerUserId,
@@ -127,6 +138,7 @@ export class PickingService {
     itemId: number,
     pickedQuantity: number,
     actorUserId: number,
+    pickedBinId?: number,
   ) {
     const task = await this.repository.findById(taskId);
 
@@ -140,6 +152,24 @@ export class PickingService {
 
     if (task.Status !== "PICKING") {
       throw new Error("Picking task must be in PICKING status");
+    }
+
+    // If the item has a known expected bin and the picker reports picking
+    // from a different one, reject before recording the pick — bin-based
+    // picking must not silently accept stock pulled from the wrong location.
+    if (pickedBinId !== undefined) {
+      const items = await this.repository.findItems(taskId);
+      const targetItem = items.find((existing) => existing.Id === itemId);
+
+      if (
+        targetItem?.BinId != null &&
+        targetItem.BinId !== pickedBinId
+      ) {
+        throw new HttpError(
+          409,
+          `Picked from the wrong bin. Expected bin ${targetItem.BinId}, got ${pickedBinId}.`,
+        );
+      }
     }
 
     const item = await this.repository.updateItem(

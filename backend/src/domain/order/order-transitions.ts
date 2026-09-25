@@ -2,6 +2,12 @@ import { HttpError } from "../../utils/http-error.js";
 
 import type { OrderStatus } from "./order-status.types.js";
 
+// Assumption: cancellation is only modeled from CREATED. Once stock is
+// reserved (or picking/packing/delivery has started) there is no cancel
+// transition in this table by design — cancelOrderWithReservationRelease
+// (inventory-reservation.repository.ts) reads the order's real current
+// status and relies on assertValidTransition to reject a cancel attempt
+// past CREATED with a clear 409, rather than silently no-op'ing.
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   CREATED: ["STOCK_RESERVED", "OUT_OF_STOCK", "CANCELLED"],
   STOCK_RESERVED: ["PICKING"],

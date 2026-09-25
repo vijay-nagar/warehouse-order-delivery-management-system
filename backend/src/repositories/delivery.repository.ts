@@ -2,6 +2,7 @@ import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
 import { recordStatusChange } from "../services/order-status.service.js";
 import { isValidTransition } from "../domain/order/order-transitions.js";
+import { insertInventoryTransactionInTransaction } from "./inventory-transaction.repository.js";
 import type { OrderStatus } from "../domain/order/order-status.types.js";
 
 export interface DeliveryRow {
@@ -457,6 +458,7 @@ export class DeliveryRepository {
         transaction,
         row.OrderId,
         id,
+        actorUserId,
       );
 
       await this.resolveOrderStatusAfterDeliveryChange(
@@ -489,21 +491,29 @@ export class DeliveryRepository {
    * OrderInventoryReservations.RecoveredAt — safe to call more than once
    * for the same order (e.g. a retried request), since it only ever acts
    * on CONSUMED reservations that have not yet been recovered.
+   *
+   * Assumption: recovery is always full-quantity and unconditional. There is
+   * no damaged/lost/inspection outcome anywhere in the schema (DeliveryStatus
+   * has no such states), so every RETURNED delivery recovers its full
+   * consumed quantity back to Available. If damaged/lost tracking is ever
+   * needed, it requires new delivery-outcome states, not a change here.
    */
   private async recoverStockForOrder(
     transaction: sql.Transaction,
     orderId: number,
     deliveryId: number,
+    actorUserId: number | null = null,
   ): Promise<Array<{ productId: number; quantity: number }>> {
     const reservationsResult = await new sql.Request(transaction)
       .input("OrderId", sql.Int, orderId)
       .query<{
         Id: number;
+        OrderItemId: number;
         InventoryId: number;
         ProductId: number;
         Quantity: number;
       }>(`
-        SELECT Id, InventoryId, ProductId, Quantity
+        SELECT Id, OrderItemId, InventoryId, ProductId, Quantity
         FROM dbo.OrderInventoryReservations WITH (UPDLOCK, ROWLOCK)
         WHERE OrderId = @OrderId
           AND Status = 'CONSUMED'
@@ -515,13 +525,14 @@ export class DeliveryRepository {
     for (const reservation of reservationsResult.recordset) {
       const inventoryResult = await new sql.Request(transaction)
         .input("InventoryId", sql.Int, reservation.InventoryId)
-        .query<{ AvailableQuantity: number }>(`
-          SELECT AvailableQuantity
+        .query<{ AvailableQuantity: number; BinId: number | null }>(`
+          SELECT AvailableQuantity, BinId
           FROM dbo.Inventory WITH (UPDLOCK, ROWLOCK)
           WHERE Id = @InventoryId;
         `);
 
       const previousQuantity = inventoryResult.recordset[0]?.AvailableQuantity;
+      const binId = inventoryResult.recordset[0]?.BinId ?? null;
 
       if (previousQuantity === undefined) {
         continue;
@@ -558,37 +569,20 @@ export class DeliveryRepository {
         continue;
       }
 
-      await new sql.Request(transaction)
-        .input("InventoryId", sql.Int, reservation.InventoryId)
-        .input("Type", sql.NVarChar(20), "RETURN_RECOVERY")
-        .input("Quantity", sql.Int, reservation.Quantity)
-        .input("PreviousQuantity", sql.Int, previousQuantity)
-        .input("NewQuantity", sql.Int, newQuantity)
-        .input(
-          "Remarks",
-          sql.NVarChar(500),
-          `Return recovery for DeliveryId=${deliveryId}, OrderId=${orderId}`,
-        )
-        .query(`
-          INSERT INTO dbo.InventoryTransactions
-          (
-            InventoryId,
-            TransactionType,
-            Quantity,
-            PreviousQuantity,
-            NewQuantity,
-            Remarks
-          )
-          VALUES
-          (
-            @InventoryId,
-            @Type,
-            @Quantity,
-            @PreviousQuantity,
-            @NewQuantity,
-            @Remarks
-          );
-        `);
+      await insertInventoryTransactionInTransaction(transaction, {
+        inventoryId: reservation.InventoryId,
+        transactionType: "RETURN_RECOVERY",
+        quantity: reservation.Quantity,
+        previousQuantity,
+        newQuantity,
+        orderId,
+        orderItemId: reservation.OrderItemId,
+        referenceType: "DELIVERY",
+        referenceId: deliveryId,
+        userId: actorUserId,
+        binId,
+        remarks: `Return recovery for DeliveryId=${deliveryId}, OrderId=${orderId}`,
+      });
 
       recovered.push({ productId: reservation.ProductId, quantity: reservation.Quantity });
     }

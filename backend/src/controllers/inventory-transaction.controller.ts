@@ -1,5 +1,6 @@
-import type { Request, Response } from "express";
+import type { Response } from "express";
 
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { getSafeErrorMessage } from "../utils/error-response.js";
 import {
   stockInService,
@@ -15,7 +16,7 @@ import {
 } from "../validators/inventory-transaction.validator.js";
 
 // Stock In
-export const stockIn = async (req: Request, res: Response) => {
+export const stockIn = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validation = stockInSchema.safeParse(req.body);
 
@@ -26,7 +27,7 @@ export const stockIn = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await stockInService(validation.data);
+    const result = await stockInService(validation.data, req.user?.userId);
 
     return res.status(201).json({
       message: "Stock added successfully",
@@ -42,7 +43,7 @@ export const stockIn = async (req: Request, res: Response) => {
 };
 
 // Stock Out
-export const stockOut = async (req: Request, res: Response) => {
+export const stockOut = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validation = stockOutSchema.safeParse(req.body);
 
@@ -53,7 +54,7 @@ export const stockOut = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await stockOutService(validation.data);
+    const result = await stockOutService(validation.data, req.user?.userId);
 
     return res.status(201).json({
       message: "Stock removed successfully",
@@ -74,7 +75,7 @@ export const stockOut = async (req: Request, res: Response) => {
 };
 
 // Stock Adjustment
-export const stockAdjustment = async (req: Request, res: Response) => {
+export const stockAdjustment = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const validation = stockAdjustmentSchema.safeParse(req.body);
 
@@ -85,7 +86,7 @@ export const stockAdjustment = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await stockAdjustmentService(validation.data);
+    const result = await stockAdjustmentService(validation.data, req.user?.userId);
 
     return res.status(201).json({
       message: "Stock adjusted successfully",
@@ -102,7 +103,7 @@ export const stockAdjustment = async (req: Request, res: Response) => {
 
 // Transaction History
 export const getTransactionHistory = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ) => {
   try {

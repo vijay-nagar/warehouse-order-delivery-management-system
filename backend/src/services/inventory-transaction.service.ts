@@ -11,37 +11,43 @@ import type {
 
 // Stock In
 export const stockInService = async (
-  input: StockInInput
+  input: StockInInput,
+  actorUserId?: number | null,
 ) => {
   return executeInventoryTransaction({
     inventoryId: input.inventoryId,
     transactionType: "IN",
     quantity: input.quantity,
     remarks: input.remarks,
+    userId: actorUserId,
   });
 };
 
 // Stock Out
 export const stockOutService = async (
-  input: StockOutInput
+  input: StockOutInput,
+  actorUserId?: number | null,
 ) => {
   return executeInventoryTransaction({
     inventoryId: input.inventoryId,
     transactionType: "OUT",
     quantity: input.quantity,
     remarks: input.remarks,
+    userId: actorUserId,
   });
 };
 
 // Stock Adjustment
 export const stockAdjustmentService = async (
-  input: StockAdjustmentInput
+  input: StockAdjustmentInput,
+  actorUserId?: number | null,
 ) => {
   return executeInventoryTransaction({
     inventoryId: input.inventoryId,
     transactionType: "ADJUSTMENT",
     quantity: input.quantity,
     remarks: input.remarks,
+    userId: actorUserId,
   });
 };
 

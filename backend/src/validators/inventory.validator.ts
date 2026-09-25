@@ -13,6 +13,11 @@ export const createInventorySchema = z
       .int("Product ID must be an integer")
       .positive("Product ID must be positive"),
 
+    binId: z
+      .number()
+      .int("Bin ID must be an integer")
+      .positive("Bin ID must be positive"),
+
     availableQuantity: z
       .number()
       .int("Available quantity must be an integer")
@@ -40,6 +45,12 @@ export const createInventorySchema = z
 // Update Inventory Validation
 export const updateInventorySchema = z
   .object({
+    binId: z
+      .number()
+      .int("Bin ID must be an integer")
+      .positive("Bin ID must be positive")
+      .optional(),
+
     availableQuantity: z
       .number()
       .int("Available quantity must be an integer")

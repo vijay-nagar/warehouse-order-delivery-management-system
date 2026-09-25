@@ -39,7 +39,8 @@ export const createInventory = async (
     if (error instanceof Error) {
       if (
         error.message === "Warehouse not found" ||
-        error.message === "Product not found"
+        error.message === "Product not found" ||
+        error.message === "Bin not found"
       ) {
         return res.status(404).json({
           success: false,
@@ -67,11 +68,19 @@ export const createInventory = async (
   }
 };
 export const getAllInventory = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ) => {
   try {
-    const inventory = await getAllInventoryService();
+    const binIdParam = req.query.binId;
+    const binId =
+      typeof binIdParam === "string" && Number.isInteger(Number(binIdParam))
+        ? Number(binIdParam)
+        : undefined;
+
+    const inventory = await getAllInventoryService(
+      binId !== undefined ? { binId } : undefined,
+    );
 
     return res.status(200).json({
       success: true,
@@ -160,10 +169,13 @@ export const updateInventory = async (
     });
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "Inventory not found") {
+      if (
+        error.message === "Inventory not found" ||
+        error.message === "Bin not found"
+      ) {
         return res.status(404).json({
           success: false,
-          message: "Inventory not found",
+          message: error.message,
         });
       }
 

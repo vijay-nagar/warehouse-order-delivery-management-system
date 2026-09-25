@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Dialog } from "../../../shared/components/overlay/Dialog";
 import { EmptyState, ErrorState, LoadingState } from "../../../shared/components/feedback/AsyncStates";
 import { useToast } from "../../../app/providers/ToastProvider";
@@ -11,7 +11,16 @@ import type { ResourceRow } from "../../../shared/types/api";
 type TransactionKind = "stockIn" | "stockOut" | "adjustment";
 
 export default function InventoryWorkspacePage() {
-  const { rows, loading, error, reload } = useResourceList(inventoryApi.list);
+  const [binIdFilter, setBinIdFilter] = useState("");
+  const loadInventory = useCallback(() => {
+    const binId = Number(binIdFilter);
+    return inventoryApi.list(
+      binIdFilter.trim() && Number.isInteger(binId) && binId > 0
+        ? { binId }
+        : undefined,
+    );
+  }, [binIdFilter]);
+  const { rows, loading, error, reload } = useResourceList(loadInventory);
   const mutation = useAsyncRequest<ResourceRow>();
   const reservation = useAsyncRequest<ResourceRow[]>();
   const historyRequest = useAsyncRequest<ResourceRow[]>();
@@ -56,7 +65,8 @@ export default function InventoryWorkspacePage() {
 
   return <main className="page-content">
     <header className="page-header"><div><h1>Inventory</h1><p>View stock and perform the verified inventory transactions.</p></div><button type="button" onClick={() => setReserveOpen(true)}>Reserve stock for order</button></header>
-    {loading ? <LoadingState label="Loading inventory" /> : error ? <ErrorState message={error.message} onRetry={() => void reload()} /> : rows.length === 0 ? <EmptyState label="No inventory records found." /> : <div className="module-panel"><div className="module-table-wrapper"><table className="module-table"><thead><tr><th>ID</th><th>Product</th><th>Warehouse</th><th>Reserved</th><th>Available</th><th>Active</th><th>Actions</th></tr></thead><tbody>{rows.map((row) => <tr key={inventoryId(row)}><td>{String(row.Id ?? row.id ?? "-")}</td><td>{String(row.ProductId ?? row.productId ?? "-")}</td><td>{String(row.WarehouseId ?? row.warehouseId ?? "-")}</td><td>{String(row.ReservedQuantity ?? row.reservedQuantity ?? "-")}</td><td>{String(row.AvailableQuantity ?? row.availableQuantity ?? "-")}</td><td>{String(row.IsActive ?? row.isActive ?? "-")}</td><td><button type="button" onClick={() => begin(row, "stockIn")}>Stock in</button><button type="button" onClick={() => begin(row, "stockOut")}>Stock out</button><button type="button" onClick={() => begin(row, "adjustment")}>Adjust</button><button type="button" onClick={() => void loadHistory(row)}>History</button></td></tr>)}</tbody></table></div></div>}
+    <div className="module-panel" style={{ marginBottom: "1rem" }}><label>Filter by Bin ID <input type="number" min="1" step="1" value={binIdFilter} onChange={(event) => setBinIdFilter(event.target.value)} placeholder="All bins" /></label></div>
+    {loading ? <LoadingState label="Loading inventory" /> : error ? <ErrorState message={error.message} onRetry={() => void reload()} /> : rows.length === 0 ? <EmptyState label="No inventory records found." /> : <div className="module-panel"><div className="module-table-wrapper"><table className="module-table"><thead><tr><th>ID</th><th>Product</th><th>Warehouse</th><th>Zone</th><th>Shelf</th><th>Bin</th><th>Reserved</th><th>Available</th><th>Active</th><th>Actions</th></tr></thead><tbody>{rows.map((row) => <tr key={inventoryId(row)}><td>{String(row.Id ?? row.id ?? "-")}</td><td>{String(row.ProductId ?? row.productId ?? "-")}</td><td>{String(row.WarehouseName ?? row.WarehouseId ?? row.warehouseId ?? "-")}</td><td>{String(row.ZoneName ?? "-")}</td><td>{String(row.ShelfName ?? "-")}</td><td>{String(row.BinName ?? "Unassigned")}</td><td>{String(row.ReservedQuantity ?? row.reservedQuantity ?? "-")}</td><td>{String(row.AvailableQuantity ?? row.availableQuantity ?? "-")}</td><td>{String(row.IsActive ?? row.isActive ?? "-")}</td><td><button type="button" onClick={() => begin(row, "stockIn")}>Stock in</button><button type="button" onClick={() => begin(row, "stockOut")}>Stock out</button><button type="button" onClick={() => begin(row, "adjustment")}>Adjust</button><button type="button" onClick={() => void loadHistory(row)}>History</button></td></tr>)}</tbody></table></div></div>}
     <Dialog open={operation !== null} title={operation === "stockIn" ? "Stock in" : operation === "stockOut" ? "Stock out" : "Inventory adjustment"} onClose={() => !mutation.loading && setOperation(null)}>
       <form className="resource-form" onSubmit={submitTransaction}><label>Quantity<input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required disabled={mutation.loading} /></label><label>Remarks <span>(optional)</span><textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} disabled={mutation.loading} /></label><div className="form-actions"><button type="button" onClick={() => setOperation(null)} disabled={mutation.loading}>Cancel</button><button type="submit" disabled={mutation.loading}>{mutation.loading ? "Saving…" : "Save"}</button></div></form>
     </Dialog>

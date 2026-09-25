@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { PickingRepository } from "../repositories/picking.repository.js";
 import { PickingService } from "../services/picking.service.js";
 import { HttpError } from "../utils/http-error.js";
+import { sendSafeErrorResponse } from "../utils/error-response.js";
 import {
   assignPickingTaskSchema,
   completePickingTaskSchema,
@@ -44,19 +45,7 @@ export const createPickingTask = async (
     });
   } catch (error) {
     console.error("Create picking task error:", error);
-
-    if (error instanceof HttpError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-
-    res.status(400).json({
-      success: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Failed to create picking task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to create picking task", 400);
   }
 };
 
@@ -157,19 +146,7 @@ export const assignPickingTask = async (
     });
   } catch (error) {
     console.error("Assign picking task error:", error);
-
-    if (error instanceof HttpError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-
-    res.status(400).json({
-      success: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Failed to assign picking task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to assign picking task", 400);
   }
 };
 
@@ -202,19 +179,7 @@ export const startPickingTask = async (
     });
   } catch (error) {
     console.error("Start picking task error:", error);
-
-    if (error instanceof HttpError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-
-    res.status(400).json({
-      success: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Failed to start picking task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to start picking task", 400);
   }
 };
 
@@ -264,19 +229,7 @@ export const completePickingTask = async (
     });
   } catch (error) {
     console.error("Complete picking task error:", error);
-
-    if (error instanceof HttpError) {
-      res.status(error.statusCode).json({ success: false, message: error.message });
-      return;
-    }
-
-    res.status(400).json({
-      success: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Failed to complete picking task",
-    });
+    sendSafeErrorResponse(res, error, "Failed to complete picking task", 400);
   }
 };
 
@@ -323,6 +276,7 @@ export const updatePickingItem = async (
       itemId,
       validation.data.pickedQuantity,
       req.user.userId,
+      validation.data.pickedBinId,
     );
 
     res.status(200).json({

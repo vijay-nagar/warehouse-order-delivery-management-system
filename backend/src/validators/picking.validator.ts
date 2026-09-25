@@ -38,4 +38,5 @@ export type CompletePickingTaskInput = z.infer<
 
 export const updatePickingItemSchema = z.object({
   pickedQuantity: z.number().int().min(0),
+  pickedBinId: z.number().int().positive().optional(),
 });

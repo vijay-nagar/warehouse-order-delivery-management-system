@@ -1,4 +1,5 @@
 import {
+  binExists,
   createInventory,
   findInventoryByWarehouseAndProduct,
   getAllInventory,
@@ -29,6 +30,12 @@ export const createInventoryService = async (
     throw new Error("Product not found");
   }
 
+  const binExistsResult = await binExists(input.binId);
+
+  if (!binExistsResult) {
+    throw new Error("Bin not found");
+  }
+
   const existingInventory = await findInventoryByWarehouseAndProduct(
     input.warehouseId,
     input.productId,
@@ -43,8 +50,8 @@ export const createInventoryService = async (
   return createInventory(input);
 };
 
-export const getAllInventoryService = async () => {
-  return getAllInventory();
+export const getAllInventoryService = async (filters?: { binId?: number }) => {
+  return getAllInventory(filters);
 };
 
 export const getInventoryByIdService = async (id: number) => {
@@ -66,7 +73,15 @@ export const updateInventoryService = async (
   if (!existingInventory) {
     throw new Error("Inventory not found");
   }
-  
+
+  if (input.binId !== undefined) {
+    const binExistsResult = await binExists(input.binId);
+
+    if (!binExistsResult) {
+      throw new Error("Bin not found");
+    }
+  }
+
   const newAvailableQuantity =
     input.availableQuantity ?? existingInventory.AvailableQuantity;
 

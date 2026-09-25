@@ -3,6 +3,7 @@ import sql from "mssql";
 import { getDatabasePool } from "../config/database.js";
 import { PackingRepository } from "./packing.repository.js";
 import { recordStatusChange } from "../services/order-status.service.js";
+import { insertInventoryTransactionInTransaction } from "./inventory-transaction.repository.js";
 
 export interface PickingTaskRow {
   Id: number;
@@ -24,6 +25,7 @@ export interface PickingTaskItemRow {
   RequiredQuantity: number;
   PickedQuantity: number;
   Status: string;
+  BinId: number | null;
   CreatedAt: Date;
   UpdatedAt: Date;
 }
@@ -74,6 +76,7 @@ export class PickingRepository {
     pickingTaskId: number,
     productId: number,
     requiredQuantity: number,
+    binId: number | null = null,
   ): Promise<void> {
     const pool = await getDatabasePool();
 
@@ -82,6 +85,7 @@ export class PickingRepository {
       .input("PickingTaskId", sql.Int, pickingTaskId)
       .input("ProductId", sql.Int, productId)
       .input("RequiredQuantity", sql.Int, requiredQuantity)
+      .input("BinId", sql.Int, binId)
       .query(`
         INSERT INTO dbo.PickingTaskItems
         (
@@ -90,6 +94,7 @@ export class PickingRepository {
           RequiredQuantity,
           PickedQuantity,
           Status,
+          BinId,
           CreatedAt,
           UpdatedAt
         )
@@ -100,6 +105,7 @@ export class PickingRepository {
           @RequiredQuantity,
           0,
           'PENDING',
+          @BinId,
           SYSUTCDATETIME(),
           SYSUTCDATETIME()
         );
@@ -150,11 +156,13 @@ export class PickingRepository {
     pickingTaskId: number,
     productId: number,
     requiredQuantity: number,
+    binId: number | null = null,
   ): Promise<void> {
     await new sql.Request(transaction)
       .input("PickingTaskId", sql.Int, pickingTaskId)
       .input("ProductId", sql.Int, productId)
       .input("RequiredQuantity", sql.Int, requiredQuantity)
+      .input("BinId", sql.Int, binId)
       .query(`
         INSERT INTO dbo.PickingTaskItems
         (
@@ -163,6 +171,7 @@ export class PickingRepository {
           RequiredQuantity,
           PickedQuantity,
           Status,
+          BinId,
           CreatedAt,
           UpdatedAt
         )
@@ -173,6 +182,7 @@ export class PickingRepository {
           @RequiredQuantity,
           0,
           'PENDING',
+          @BinId,
           SYSUTCDATETIME(),
           SYSUTCDATETIME()
         );
@@ -234,17 +244,27 @@ export class PickingRepository {
       .input("PickingTaskId", sql.Int, taskId)
       .query<PickingTaskItemRow>(`
         SELECT
-          Id,
-          PickingTaskId,
-          ProductId,
-          RequiredQuantity,
-          PickedQuantity,
-          Status,
-          CreatedAt,
-          UpdatedAt
-        FROM dbo.PickingTaskItems
-        WHERE PickingTaskId = @PickingTaskId
-        ORDER BY Id;
+          item.Id,
+          item.PickingTaskId,
+          item.ProductId,
+          item.RequiredQuantity,
+          item.PickedQuantity,
+          item.Status,
+          item.BinId,
+          item.CreatedAt,
+          item.UpdatedAt,
+          w.Id AS WarehouseId,
+          w.Name AS WarehouseName,
+          z.Name AS ZoneName,
+          s.Name AS ShelfName,
+          b.Name AS BinName
+        FROM dbo.PickingTaskItems item
+        LEFT JOIN dbo.Bins b ON b.Id = item.BinId
+        LEFT JOIN dbo.Shelves s ON s.Id = b.ShelfId
+        LEFT JOIN dbo.Zones z ON z.Id = s.ZoneId
+        LEFT JOIN dbo.Warehouses w ON w.Id = z.WarehouseId
+        WHERE item.PickingTaskId = @PickingTaskId
+        ORDER BY item.Id;
       `);
 
     return result.recordset;
@@ -375,6 +395,7 @@ export class PickingRepository {
           INSERTED.RequiredQuantity,
           INSERTED.PickedQuantity,
           INSERTED.Status,
+          INSERTED.BinId,
           INSERTED.CreatedAt,
           INSERTED.UpdatedAt
         FROM dbo.PickingTaskItems AS item
@@ -459,6 +480,10 @@ export class PickingRepository {
           SET
             ReservedQuantity = ReservedQuantity - @Quantity,
             UpdatedAt = SYSUTCDATETIME()
+          OUTPUT
+            INSERTED.BinId,
+            DELETED.ReservedQuantity AS PreviousReservedQuantity,
+            INSERTED.ReservedQuantity AS NewReservedQuantity
           WHERE Id = @InventoryId
             AND ReservedQuantity >= @Quantity;
         `);
@@ -468,6 +493,21 @@ export class PickingRepository {
             `Inventory ${reservation.InventoryId} cannot consume reserved quantity ${reservation.Quantity}.`,
           );
         }
+
+        const consumedInventory = inventoryResult.recordset[0];
+
+        await insertInventoryTransactionInTransaction(transaction, {
+          inventoryId: reservation.InventoryId,
+          transactionType: "PICK_CONSUME",
+          quantity: reservation.Quantity,
+          previousQuantity: consumedInventory.PreviousReservedQuantity,
+          newQuantity: consumedInventory.NewReservedQuantity,
+          orderId: task.OrderId,
+          referenceType: "PICKING_TASK",
+          referenceId: task.Id,
+          userId: actorUserId,
+          binId: consumedInventory.BinId,
+        });
 
         const consumeRequest = new sql.Request(transaction)
           .input("ReservationId", sql.Int, reservation.Id);
