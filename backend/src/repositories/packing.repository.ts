@@ -157,22 +157,30 @@ export class PackingRepository {
 
   async findAll(
     pagination: PaginationRequest,
+    filters?: { status?: string },
   ): Promise<PaginationResult<PackingTaskRow>> {
     const pool = await getDatabasePool();
     const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const countResult = await pool.request().query<{ TotalCount: number }>(`
-      SELECT COUNT(*) AS TotalCount FROM dbo.PackingTasks;
+    const whereClause = filters?.status ? "WHERE Status = @Status" : "";
+
+    const countRequest = pool.request();
+    if (filters?.status) countRequest.input("Status", sql.NVarChar(20), filters.status);
+
+    const countResult = await countRequest.query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount FROM dbo.PackingTasks ${whereClause};
     `);
 
     const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
     const totalPages = getTotalPages(totalCount, pagination.pageSize);
 
-    const result = await pool
+    const listRequest = pool
       .request()
       .input("Offset", sql.Int, offset)
-      .input("PageSize", sql.Int, pagination.pageSize)
-      .query<PackingTaskRow>(`
+      .input("PageSize", sql.Int, pagination.pageSize);
+    if (filters?.status) listRequest.input("Status", sql.NVarChar(20), filters.status);
+
+    const result = await listRequest.query<PackingTaskRow>(`
       SELECT
         Id,
         OrderId,
@@ -187,6 +195,7 @@ export class PackingRepository {
         CreatedAt,
         UpdatedAt
       FROM dbo.PackingTasks
+      ${whereClause}
       ORDER BY Id DESC
       OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
     `);

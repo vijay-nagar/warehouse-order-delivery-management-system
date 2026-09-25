@@ -1,10 +1,12 @@
-import { request } from "../../../shared/api/request";
+import { request, requestPaginated } from "../../../shared/api/request";
 import type { ResourceRow } from "../../../shared/types/api";
+import type { PaginationParams } from "../../../shared/types/pagination";
 
 type Body = Record<string, unknown>;
 export const packingApi = {
   create: (data: Body) => request<ResourceRow>({ method: "POST", url: "/api/packing", data }),
-  list: () => request<ResourceRow[]>({ method: "GET", url: "/api/packing" }),
+  list: (params?: PaginationParams & { status?: string }) =>
+    requestPaginated<ResourceRow>({ method: "GET", url: "/api/packing", params }),
   byId: (id: number) => request<ResourceRow>({ method: "GET", url: `/api/packing/${id}` }),
   assign: (id: number, data: Body) => request<ResourceRow>({ method: "POST", url: `/api/packing/${id}/assign`, data }),
   start: (id: number) => request<ResourceRow>({ method: "POST", url: `/api/packing/${id}/start` }),

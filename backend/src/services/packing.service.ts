@@ -40,8 +40,8 @@ export class PackingService {
     );
   }
 
-  async getTasks(pagination: PaginationRequest) {
-    return this.repository.findAll(pagination);
+  async getTasks(pagination: PaginationRequest, filters?: { status?: string }) {
+    return this.repository.findAll(pagination, filters);
   }
 
   async getTaskById(id: number) {

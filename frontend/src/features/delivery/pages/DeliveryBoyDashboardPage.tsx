@@ -3,6 +3,7 @@ import "./DeliveryBoyDashboardPage.css";
 
 import { deliveryApi } from "../api/deliveryApi";
 import type { ResourceRow } from "../../../shared/types/api";
+import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 type Delivery = ResourceRow & {
   Id?: number;
@@ -95,9 +96,9 @@ export default function DeliveryBoyDashboardPage() {
     try {
       setError("");
 
-      const response = await deliveryApi.myDeliveries();
+      const response = await deliveryApi.myDeliveries({ pageSize: MAX_PAGE_SIZE });
 
-      setDeliveries(Array.isArray(response) ? (response as Delivery[]) : []);
+      setDeliveries(Array.isArray(response.data) ? (response.data as Delivery[]) : []);
     } catch (err) {
       console.error("Failed to load delivery tasks:", err);
       setError("Unable to load your deliveries.");

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deliveryApi } from "../../api/deliveryApi";
 import type { ResourceRow } from "../../../../shared/types/api";
+import { MAX_PAGE_SIZE } from "../../../../shared/types/pagination";
 
 export default function MyDeliveriesPage() {
   const [deliveries, setDeliveries] = useState<ResourceRow[]>([]);
@@ -14,8 +15,8 @@ export default function MyDeliveriesPage() {
       setLoading(true);
       setError("");
 
-      const response = await deliveryApi.myDeliveries();
-      setDeliveries(response ?? []);
+      const response = await deliveryApi.myDeliveries({ pageSize: MAX_PAGE_SIZE });
+      setDeliveries(response.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load deliveries.");
     } finally {

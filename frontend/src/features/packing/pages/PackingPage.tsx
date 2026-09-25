@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { WorkflowWorkspace } from "../../../shared/page-templates/WorkflowWorkspace";
 
 import type { WorkflowAction } from "../../../shared/page-templates/WorkflowWorkspace";
 
 import type { ResourceRow } from "../../../shared/types/api";
+import type { PaginationParams } from "../../../shared/types/pagination";
+import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 import { packingApi } from "../api/packingApi";
 
@@ -27,11 +29,11 @@ export default function PackingPage() {
 
     const loadPackingCounts = async () => {
       try {
-        const rows = await packingApi.list();
+        const response = await packingApi.list({ pageSize: MAX_PAGE_SIZE });
 
         if (!active) return;
 
-        setPackingRows(rows);
+        setPackingRows(response.data);
       } catch {
         // Main WorkflowWorkspace handles table API errors.
       }
@@ -113,21 +115,12 @@ export default function PackingPage() {
     },
   ];
 
-  const selectedList = useMemo(
-    () => async () => {
-      const rows = await packingApi.list();
-
-      if (statusFilter === "ALL") {
-        return rows;
-      }
-
-      return rows.filter(
-        (row) =>
-          String(
-            row.Status ?? row.status ?? "",
-          ).toUpperCase() === statusFilter,
-      );
-    },
+  const selectedList = useCallback(
+    (params?: PaginationParams) =>
+      packingApi.list({
+        ...params,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+      }),
     [statusFilter],
   );
 

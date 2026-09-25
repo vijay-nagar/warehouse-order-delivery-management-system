@@ -6,10 +6,12 @@ import {
   PageHeader,
   StatusBadge,
 } from "../components/feedback/AsyncStates";
+import { Pagination } from "../components/table/Pagination";
 import { useToast } from "../../app/providers/ToastProvider";
-import { useResourceList } from "../hooks/useResourceList";
+import { usePaginatedResourceList } from "../hooks/usePaginatedResourceList";
 import { toApiError } from "../api/errors";
 import type { ResourceRow } from "../types/api";
+import type { PaginatedResult, PaginationParams } from "../types/pagination";
 
 export interface WorkflowField {
   name: string;
@@ -36,7 +38,7 @@ export interface WorkflowAction {
 interface WorkflowWorkspaceProps {
   title: string;
   description: string;
-  list: () => Promise<ResourceRow[]>;
+  list: (params?: PaginationParams) => Promise<PaginatedResult<ResourceRow>>;
   byId: (id: number) => Promise<ResourceRow>;
   actions: WorkflowAction[];
   columns: string[];
@@ -54,8 +56,8 @@ export function WorkflowWorkspace({
   headerControl,
   topContent,
 }: WorkflowWorkspaceProps) {
-  const { rows, loading, error, reload } =
-    useResourceList(list);
+  const { rows, loading, error, reload, page, pageSize, setPage, setPageSize, pagination } =
+    usePaginatedResourceList(list);
 
   const { notify } = useToast();
 
@@ -278,6 +280,15 @@ export function WorkflowWorkspace({
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          pageCount={pagination?.totalPages ?? 1}
+          totalRecords={pagination?.totalRecords}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       <Dialog

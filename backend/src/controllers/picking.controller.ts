@@ -59,8 +59,13 @@ export const getPickingTasks = async (
       req.query.page as string | undefined,
       req.query.pageSize as string | undefined,
     );
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
 
-    const tasks = await pickingService.getTasks(pagination);
+    const tasks = await pickingService.getTasks(
+      pagination,
+      status !== undefined ? { status } : undefined,
+    );
 
     res.status(200).json({
       success: true,

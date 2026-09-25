@@ -1,11 +1,14 @@
-import { request } from "../../../shared/api/request";
+import { request, requestPaginated } from "../../../shared/api/request";
 import type { ResourceRow } from "../../../shared/types/api";
+import type { PaginationParams } from "../../../shared/types/pagination";
 
 type Body = Record<string, unknown>;
 export const deliveryApi = {
   create: (data: Body) => request<ResourceRow>({ method: "POST", url: "/api/delivery", data }),
-  list: () => request<ResourceRow[]>({ method: "GET", url: "/api/delivery" }),
-  myDeliveries: () => request<ResourceRow[]>({ method: "GET", url: "/api/delivery/my-deliveries" }),
+  list: (params?: PaginationParams & { status?: string }) =>
+    requestPaginated<ResourceRow>({ method: "GET", url: "/api/delivery", params }),
+  myDeliveries: (params?: PaginationParams) =>
+    requestPaginated<ResourceRow>({ method: "GET", url: "/api/delivery/my-deliveries", params }),
   byId: (id: number) => request<ResourceRow>({ method: "GET", url: `/api/delivery/${id}` }),
   assign: (id: number, data: Body) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/assign`, data }),
   pickup: (id: number) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/pickup` }),

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { WorkflowWorkspace } from "../../../shared/page-templates/WorkflowWorkspace";
 
 import type { WorkflowAction } from "../../../shared/page-templates/WorkflowWorkspace";
 
 import type { ResourceRow } from "../../../shared/types/api";
+import type { PaginatedResult, PaginationParams } from "../../../shared/types/pagination";
+import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 import { deliveryApi } from "../api/deliveryApi";
 
@@ -28,11 +30,11 @@ export default function DeliveryPage() {
 
     const loadDeliveryCounts = async () => {
       try {
-        const rows = await deliveryApi.list();
+        const response = await deliveryApi.list({ pageSize: MAX_PAGE_SIZE });
 
         if (!active) return;
 
-        setDeliveryRows(rows);
+        setDeliveryRows(response.data);
       } catch {
         // Main WorkflowWorkspace handles table API errors.
       }
@@ -186,26 +188,33 @@ export default function DeliveryPage() {
     },
   ];
 
-  const selectedList = useMemo(
-    () => async () => {
-      const rows = await deliveryApi.list();
-
-      if (statusFilter === "ALL") {
-        return rows;
-      }
-
+  // UNASSIGNED isn't a real Status value (it's DeliveryBoyUserId being
+  // null), so the backend can't filter on it server-side — fall back to a
+  // capped, unpaginated fetch and filter client-side for that one case,
+  // rather than adding a bespoke backend concept for it.
+  const selectedList = useCallback(
+    async (params?: PaginationParams): Promise<PaginatedResult<ResourceRow>> => {
       if (statusFilter === "UNASSIGNED") {
-        return rows.filter((row) =>
-          isUnassigned(row),
-        );
+        const response = await deliveryApi.list({ pageSize: MAX_PAGE_SIZE });
+        const data = response.data.filter((row) => isUnassigned(row));
+
+        return {
+          data,
+          pagination: {
+            ...response.pagination,
+            page: 1,
+            totalPages: 1,
+            totalRecords: data.length,
+            hasNext: false,
+            hasPrevious: false,
+          },
+        };
       }
 
-      return rows.filter(
-        (row) =>
-          String(
-            row.Status ?? row.status ?? "",
-          ).toUpperCase() === statusFilter,
-      );
+      return deliveryApi.list({
+        ...params,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+      });
     },
     [statusFilter],
   );

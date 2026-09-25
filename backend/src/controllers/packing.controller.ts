@@ -47,8 +47,13 @@ export async function getPackingTasks(req: Request, res: Response) {
       req.query.page as string | undefined,
       req.query.pageSize as string | undefined,
     );
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
 
-    const result = await packingService.getTasks(pagination);
+    const result = await packingService.getTasks(
+      pagination,
+      status !== undefined ? { status } : undefined,
+    );
 
     res.json({
       success: true,

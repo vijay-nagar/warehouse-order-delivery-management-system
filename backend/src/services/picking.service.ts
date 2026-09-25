@@ -46,8 +46,8 @@ export class PickingService {
     return this.getTaskById(taskId);
   }
 
-  async getTasks(pagination: PaginationRequest) {
-    const result = await this.repository.findAll(pagination);
+  async getTasks(pagination: PaginationRequest, filters?: { status?: string }) {
+    const result = await this.repository.findAll(pagination, filters);
 
     const items = await Promise.all(
       result.items.map(async (task) => ({
