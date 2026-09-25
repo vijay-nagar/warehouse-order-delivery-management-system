@@ -14,6 +14,7 @@ import type {
   CreateInventoryInput,
   UpdateInventoryInput,
 } from "../validators/inventory.validator.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 export const createInventoryService = async (
   input: CreateInventoryInput,
@@ -50,8 +51,11 @@ export const createInventoryService = async (
   return createInventory(input);
 };
 
-export const getAllInventoryService = async (filters?: { binId?: number }) => {
-  return getAllInventory(filters);
+export const getAllInventoryService = async (
+  pagination: PaginationRequest,
+  filters?: { binId?: number },
+) => {
+  return getAllInventory(pagination, filters);
 };
 
 export const getInventoryByIdService = async (id: number) => {

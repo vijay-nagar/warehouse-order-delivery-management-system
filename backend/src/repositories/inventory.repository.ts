@@ -1,10 +1,18 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 import type {
   CreateInventoryInput,
   UpdateInventoryInput,
 } from "../validators/inventory.validator.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 // Columns + joined location path (Warehouse/Zone/Shelf/Bin) shared by every
 // inventory read query, so the API can always surface exact storage location.
 const INVENTORY_SELECT_WITH_LOCATION = `
@@ -155,25 +163,49 @@ export const createInventory = async (
   return result.recordset[0];
 };
 
-export const getAllInventory = async (filters?: { binId?: number }) => {
+export const getAllInventory = async (
+  pagination: PaginationRequest,
+  filters?: { binId?: number },
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const request = pool.request();
+  const whereClause = filters?.binId !== undefined ? "WHERE i.BinId = @BinId" : "";
 
-  let whereClause = "";
-
+  const countRequest = pool.request();
   if (filters?.binId !== undefined) {
-    request.input("BinId", sql.Int, filters.binId);
-    whereClause = "WHERE i.BinId = @BinId";
+    countRequest.input("BinId", sql.Int, filters.binId);
   }
 
-  const result = await request.query(`
-    ${INVENTORY_SELECT_WITH_LOCATION}
-    ${whereClause}
-    ORDER BY i.Id DESC;
+  const countResult = await countRequest.query(`
+    SELECT COUNT(*) AS TotalCount FROM Inventory i ${whereClause};
   `);
 
-  return result.recordset;
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
+
+  const listRequest = pool
+    .request()
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize);
+  if (filters?.binId !== undefined) {
+    listRequest.input("BinId", sql.Int, filters.binId);
+  }
+
+  const result = await listRequest.query(`
+    ${INVENTORY_SELECT_WITH_LOCATION}
+    ${whereClause}
+    ORDER BY i.Id DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+  `);
+
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };
 
 export const getInventoryById = async (id: number) => {

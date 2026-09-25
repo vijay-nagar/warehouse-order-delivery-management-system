@@ -8,6 +8,7 @@ import type {
   StockOutInput,
   StockAdjustmentInput,
 } from "../validators/inventory-transaction.validator.js";
+import type { PaginationRequest } from "../shared/pagination/pagination.types.js";
 
 // Stock In
 export const stockInService = async (
@@ -53,7 +54,8 @@ export const stockAdjustmentService = async (
 
 // Transaction History
 export const getTransactionHistoryService = async (
-  inventoryId: number
+  inventoryId: number,
+  pagination: PaginationRequest,
 ) => {
-  return getInventoryTransactionHistory(inventoryId);
+  return getInventoryTransactionHistory(inventoryId, pagination);
 };

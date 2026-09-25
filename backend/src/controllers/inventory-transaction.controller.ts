@@ -2,6 +2,7 @@ import type { Response } from "express";
 
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { getSafeErrorMessage } from "../utils/error-response.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 import {
   stockInService,
   stockOutService,
@@ -115,10 +116,17 @@ export const getTransactionHistory = async (
       });
     }
 
-    const result = await getTransactionHistoryService(inventoryId);
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
+    const result = await getTransactionHistoryService(inventoryId, pagination);
 
     return res.status(200).json({
-      data: result,
+      success: true,
+      data: result.items,
+      pagination: toPaginationMeta(result),
     });
   } catch (error) {
     const message = getSafeErrorMessage(error, "Server error");

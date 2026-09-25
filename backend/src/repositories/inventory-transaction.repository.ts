@@ -1,8 +1,16 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 
 import type { TransactionType } from "../domain/inventory/inventory-transaction.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 interface CreateTransactionInput {
   inventoryId: number;
@@ -224,19 +232,42 @@ export const executeInventoryTransaction = async (
 
 // Get Transaction History
 export const getInventoryTransactionHistory = async (
-  inventoryId: number
-) => {
+  inventoryId: number,
+  pagination: PaginationRequest,
+): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
+  const offset = getPaginationOffset(pagination.page, pagination.pageSize);
+
+  const countResult = await pool
+    .request()
+    .input("InventoryId", sql.Int, inventoryId)
+    .query<{ TotalCount: number }>(`
+      SELECT COUNT(*) AS TotalCount
+      FROM InventoryTransactions
+      WHERE InventoryId = @InventoryId;
+    `);
+
+  const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+  const totalPages = getTotalPages(totalCount, pagination.pageSize);
 
   const result = await pool
     .request()
     .input("InventoryId", sql.Int, inventoryId)
+    .input("Offset", sql.Int, offset)
+    .input("PageSize", sql.Int, pagination.pageSize)
     .query(`
       SELECT *
       FROM InventoryTransactions
       WHERE InventoryId = @InventoryId
-      ORDER BY Id DESC;
+      ORDER BY Id DESC
+      OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
     `);
 
-  return result.recordset;
+  return {
+    items: result.recordset,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    totalCount,
+    totalPages,
+  };
 };

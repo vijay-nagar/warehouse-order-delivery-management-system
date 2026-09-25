@@ -3,6 +3,10 @@ import type {
   CreateNotificationInput,
   Notification,
 } from "../domain/notifications/notification.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 export class NotificationService {
   private readonly notificationRepository =
@@ -16,14 +20,16 @@ export class NotificationService {
 
   async getUserNotifications(
     userId: number,
-  ): Promise<Notification[]> {
-    return this.notificationRepository.findByUserId(userId);
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<Notification>> {
+    return this.notificationRepository.findByUserId(userId, pagination);
   }
 
   async getUnreadNotifications(
     userId: number,
-  ): Promise<Notification[]> {
-    return this.notificationRepository.findUnreadByUserId(userId);
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<Notification>> {
+    return this.notificationRepository.findUnreadByUserId(userId, pagination);
   }
 
   async markAsRead(

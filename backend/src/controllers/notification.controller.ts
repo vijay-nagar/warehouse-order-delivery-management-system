@@ -3,6 +3,7 @@ import type { NextFunction, Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 import { NotificationService } from "../services/notification.service.js";
 import { createNotificationSchema } from "../validators/notification.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 const notificationService = new NotificationService();
 
@@ -41,14 +42,21 @@ export const getMyNotifications = async (
       return;
     }
 
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
     const notifications =
       await notificationService.getUserNotifications(
         req.user.userId,
+        pagination,
       );
 
     res.status(200).json({
       success: true,
-      data: notifications,
+      data: notifications.items,
+      pagination: toPaginationMeta(notifications),
     });
   } catch (error) {
     next(error);
@@ -70,14 +78,21 @@ export const getMyUnreadNotifications = async (
       return;
     }
 
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+
     const notifications =
       await notificationService.getUnreadNotifications(
         req.user.userId,
+        pagination,
       );
 
     res.status(200).json({
       success: true,
-      data: notifications,
+      data: notifications.items,
+      pagination: toPaginationMeta(notifications),
     });
   } catch (error) {
     next(error);

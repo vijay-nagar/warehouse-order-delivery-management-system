@@ -1,11 +1,19 @@
 import sql from "mssql";
 
 import { getDatabasePool } from "../config/database.js";
+import {
+  getPaginationOffset,
+  getTotalPages,
+} from "../shared/pagination/pagination.js";
 import type {
   CreateNotificationInput,
   Notification,
   NotificationType,
 } from "../domain/notifications/notification.types.js";
+import type {
+  PaginationRequest,
+  PaginationResult,
+} from "../shared/pagination/pagination.types.js";
 
 interface NotificationRow {
   Id: number;
@@ -75,12 +83,28 @@ export class NotificationRepository {
     return mapNotification(row);
   }
 
-  async findByUserId(userId: number): Promise<Notification[]> {
+  async findByUserId(
+    userId: number,
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<Notification>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
+
+    const countResult = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query<{ TotalCount: number }>(`
+        SELECT COUNT(*) AS TotalCount FROM dbo.Notifications WHERE UserId = @userId;
+      `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
 
     const result = await pool
       .request()
       .input("userId", sql.Int, userId)
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize)
       .query<NotificationRow>(`
         SELECT
           Id,
@@ -92,18 +116,43 @@ export class NotificationRepository {
           CreatedAt
         FROM dbo.Notifications
         WHERE UserId = @userId
-        ORDER BY Id DESC;
+        ORDER BY Id DESC
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
       `);
 
-    return result.recordset.map(mapNotification);
+    return {
+      items: result.recordset.map(mapNotification),
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
-  async findUnreadByUserId(userId: number): Promise<Notification[]> {
+  async findUnreadByUserId(
+    userId: number,
+    pagination: PaginationRequest,
+  ): Promise<PaginationResult<Notification>> {
     const pool = await getDatabasePool();
+    const offset = getPaginationOffset(pagination.page, pagination.pageSize);
+
+    const countResult = await pool
+      .request()
+      .input("userId", sql.Int, userId)
+      .query<{ TotalCount: number }>(`
+        SELECT COUNT(*) AS TotalCount
+        FROM dbo.Notifications
+        WHERE UserId = @userId AND IsRead = 0;
+      `);
+
+    const totalCount = countResult.recordset[0]?.TotalCount ?? 0;
+    const totalPages = getTotalPages(totalCount, pagination.pageSize);
 
     const result = await pool
       .request()
       .input("userId", sql.Int, userId)
+      .input("Offset", sql.Int, offset)
+      .input("PageSize", sql.Int, pagination.pageSize)
       .query<NotificationRow>(`
         SELECT
           Id,
@@ -116,10 +165,17 @@ export class NotificationRepository {
         FROM dbo.Notifications
         WHERE UserId = @userId
           AND IsRead = 0
-        ORDER BY Id DESC;
+        ORDER BY Id DESC
+        OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
       `);
 
-    return result.recordset.map(mapNotification);
+    return {
+      items: result.recordset.map(mapNotification),
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalCount,
+      totalPages,
+    };
   }
 
   async markAsRead(

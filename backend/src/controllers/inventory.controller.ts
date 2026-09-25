@@ -12,6 +12,7 @@ import {
   createInventorySchema,
   updateInventorySchema,
 } from "../validators/inventory.validator.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 export const createInventory = async (
   req: Request,
@@ -72,6 +73,10 @@ export const getAllInventory = async (
   res: Response,
 ) => {
   try {
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
     const binIdParam = req.query.binId;
     const binId =
       typeof binIdParam === "string" && Number.isInteger(Number(binIdParam))
@@ -79,12 +84,14 @@ export const getAllInventory = async (
         : undefined;
 
     const inventory = await getAllInventoryService(
+      pagination,
       binId !== undefined ? { binId } : undefined,
     );
 
     return res.status(200).json({
       success: true,
-      data: inventory,
+      data: inventory.items,
+      pagination: toPaginationMeta(inventory),
     });
   } catch (error) {
     console.error("Get inventory error:", error);
