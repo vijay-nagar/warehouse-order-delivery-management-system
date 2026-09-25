@@ -6,7 +6,7 @@ import { OrderRepository } from "../repositories/order.repository.js";
 import { OrderService } from "../services/order.service.js";
 import { createOrderSchema } from "../validators/order.validator.js";
 import { redisService } from "../infrastructure/redis/redis.service.js";
-import { parsePagination } from "../shared/pagination/pagination.js";
+import { parsePagination, toPaginationMeta } from "../shared/pagination/pagination.js";
 
 const orderService = new OrderService(
   new OrderRepository(),
@@ -140,7 +140,8 @@ export const getOrders = async (
 
     res.status(200).json({
       success: true,
-      data: orders,
+      data: orders.items,
+      pagination: toPaginationMeta(orders),
     });
   } catch {
     res.status(500).json({

@@ -1,15 +1,15 @@
-import { request } from "../../../shared/api/request";
+import { request, requestPaginated } from "../../../shared/api/request";
 import type { ResourceRow } from "../../../shared/types/api";
 import type {
+  PaginatedResult,
   PaginationParams,
-  PaginationResult,
 } from "../../../shared/types/pagination";
 
 type Body = Record<string, unknown>;
 export const ordersApi = {
   create: (data: Body) => request<ResourceRow>({ method: "POST", url: "/api/orders", data }),
-  list: (params?: PaginationParams) =>
-    request<PaginationResult<ResourceRow>>({
+  list: (params?: PaginationParams): Promise<PaginatedResult<ResourceRow>> =>
+    requestPaginated<ResourceRow>({
       method: "GET",
       url: "/api/orders",
       params,

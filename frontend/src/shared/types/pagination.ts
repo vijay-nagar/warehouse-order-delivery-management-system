@@ -7,12 +7,20 @@ export interface PaginationParams {
   filters?: Record<string, unknown>;
 }
 
-export interface PaginationResult<T> {
-  items: T[];
+// Wire-format pagination metadata, as sent by every paginated backend
+// endpoint under a sibling "pagination" key next to "data".
+export interface PaginationMeta {
   page: number;
   pageSize: number;
-  totalCount: number;
+  totalRecords: number;
   totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  pagination: PaginationMeta;
 }
 
 export const DEFAULT_PAGE = 1;
