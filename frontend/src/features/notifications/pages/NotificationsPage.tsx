@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../../../services/api";
+import { notificationsApi } from "../api/notificationsApi";
+import { toApiError } from "../../../shared/api/errors";
 
 interface Notification {
   id: number;
@@ -14,6 +15,7 @@ interface Notification {
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [markingId, setMarkingId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const loadNotifications = async () => {
@@ -21,10 +23,10 @@ export default function NotificationsPage() {
       setLoading(true);
       setError("");
 
-      const response = await api.get("/api/notifications/me");
-      setNotifications(response.data.data ?? []);
-    } catch {
-      setError("Unable to load notifications. Please try again.");
+      const response = await notificationsApi.mine();
+      setNotifications(response as unknown as Notification[]);
+    } catch (requestError) {
+      setError(toApiError(requestError).message);
     } finally {
       setLoading(false);
     }
@@ -32,17 +34,13 @@ export default function NotificationsPage() {
 
   const markAsRead = async (id: number) => {
     try {
-      await api.patch(`/api/notifications/${id}/read`);
-
-      setNotifications((current) =>
-        current.map((notification) =>
-          notification.id === id
-            ? { ...notification, isRead: true }
-            : notification,
-        ),
-      );
-    } catch {
-      setError("Unable to mark notification as read.");
+      setMarkingId(id);
+      await notificationsApi.markRead(id);
+      await loadNotifications();
+    } catch (requestError) {
+      setError(toApiError(requestError).message);
+    } finally {
+      setMarkingId(null);
     }
   };
 
@@ -123,8 +121,9 @@ export default function NotificationsPage() {
                         <button
                           className="module-refresh-button"
                           onClick={() => markAsRead(notification.id)}
+                          disabled={markingId === notification.id}
                         >
-                          Mark as Read
+                          {markingId === notification.id ? "Updating..." : "Mark as Read"}
                         </button>
                       ) : (
                         <span>—</span>

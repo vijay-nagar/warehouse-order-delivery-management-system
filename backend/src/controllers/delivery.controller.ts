@@ -1,11 +1,20 @@
 import type { Request, Response } from "express";
+
 import { DeliveryRepository } from "../repositories/delivery.repository.js";
 import { sendSafeErrorResponse } from "../utils/error-response.js";
 import { DeliveryService } from "../services/delivery.service.js";
 
-const deliveryService = new DeliveryService(new DeliveryRepository());
+import type { AuthenticatedRequest } from "../middleware/auth.middleware.js";
 
-export async function createDelivery(req: Request, res: Response) {
+const deliveryService = new DeliveryService(
+  new DeliveryRepository(),
+);
+
+// Create Delivery
+export async function createDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.createDelivery(
       req.body.orderId,
@@ -18,11 +27,20 @@ export async function createDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to create delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to create delivery",
+      400,
+    );
   }
 }
 
-export async function getDeliveries(_req: Request, res: Response) {
+// Get All Deliveries
+export async function getDeliveries(
+  _req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.getDeliveries();
 
@@ -31,13 +49,57 @@ export async function getDeliveries(_req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to get deliveries", 500);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to get deliveries",
+      500,
+    );
   }
 }
 
-export async function getDeliveryById(req: Request, res: Response) {
+// Get My Assigned Deliveries - Delivery Boy
+export async function getMyDeliveries(
+  req: AuthenticatedRequest,
+  res: Response,
+) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const result =
+      await deliveryService.getDeliveriesByDeliveryBoy(
+        req.user.userId,
+      );
+
+    return res.status(200).json({
+      success: true,
+      message: "Assigned deliveries fetched successfully",
+      data: result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Failed to get assigned deliveries",
+    });
+  }
+}
+
+// Get Delivery By ID
+export async function getDeliveryById(
+  req: Request,
+  res: Response,
+) {
   try {
     const id = Number(req.params.id);
+
     const result = await deliveryService.getDeliveryById(id);
 
     if (!result) {
@@ -52,11 +114,55 @@ export async function getDeliveryById(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    return sendSafeErrorResponse(res, error, "Failed to get delivery", 400);
+    return sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to get delivery",
+      400,
+    );
   }
 }
 
-export async function assignDelivery(req: Request, res: Response) {
+// Get Delivery Tracking
+export async function getDeliveryTracking(
+  req: Request,
+  res: Response,
+) {
+  try {
+    const deliveryId = Number(req.params.id);
+
+    if (!Number.isInteger(deliveryId) || deliveryId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid delivery ID",
+      });
+    }
+
+    const result =
+      await deliveryService.getTrackingByDeliveryId(
+        deliveryId,
+      );
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    return res.status(404).json({
+      success: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Tracking not found",
+    });
+  }
+}
+
+// Assign Delivery
+export async function assignDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.assign(
       Number(req.params.id),
@@ -69,13 +175,24 @@ export async function assignDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to assign delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to assign delivery",
+      400,
+    );
   }
 }
 
-export async function pickupDelivery(req: Request, res: Response) {
+// Pickup Delivery
+export async function pickupDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
-    const result = await deliveryService.pickup(Number(req.params.id));
+    const result = await deliveryService.pickup(
+      Number(req.params.id),
+    );
 
     res.json({
       success: true,
@@ -83,11 +200,20 @@ export async function pickupDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to pickup delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to pickup delivery",
+      400,
+    );
   }
 }
 
-export async function outForDelivery(req: Request, res: Response) {
+// Out For Delivery
+export async function outForDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.outForDelivery(
       Number(req.params.id),
@@ -99,13 +225,24 @@ export async function outForDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to update delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to update delivery",
+      400,
+    );
   }
 }
 
-export async function deliverDelivery(req: Request, res: Response) {
+// Complete Delivery
+export async function deliverDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
-    const result = await deliveryService.deliver(Number(req.params.id));
+    const result = await deliveryService.deliver(
+      Number(req.params.id),
+    );
 
     res.json({
       success: true,
@@ -113,11 +250,20 @@ export async function deliverDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to complete delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to complete delivery",
+      400,
+    );
   }
 }
 
-export async function failDelivery(req: Request, res: Response) {
+// Fail Delivery
+export async function failDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.fail(
       Number(req.params.id),
@@ -130,11 +276,20 @@ export async function failDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to mark delivery failed", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to mark delivery failed",
+      400,
+    );
   }
 }
 
-export async function returnDelivery(req: Request, res: Response) {
+// Return Delivery
+export async function returnDelivery(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.returnDelivery(
       Number(req.params.id),
@@ -147,11 +302,20 @@ export async function returnDelivery(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to return delivery", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to return delivery",
+      400,
+    );
   }
 }
 
-export async function addTracking(req: Request, res: Response) {
+// Add Tracking
+export async function addTracking(
+  req: Request,
+  res: Response,
+) {
   try {
     const result = await deliveryService.addTracking(
       Number(req.params.id),
@@ -166,6 +330,11 @@ export async function addTracking(req: Request, res: Response) {
       data: result,
     });
   } catch (error) {
-    sendSafeErrorResponse(res, error, "Failed to add tracking", 400);
+    sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to add tracking",
+      400,
+    );
   }
 }

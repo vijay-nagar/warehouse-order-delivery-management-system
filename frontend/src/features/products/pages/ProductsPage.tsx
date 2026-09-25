@@ -1,19 +1,6 @@
-import ResourceTablePage from "../../../components/tables/ResourceTablePage";
+import { CrudResourcePage } from "../../../shared/page-templates/CrudResourcePage";
+import { productsApi } from "../api/productsApi";
 
 export default function ProductsPage() {
-  return (
-    <ResourceTablePage
-      title="Products"
-      description="View products that participate in inventory and order processing."
-      endpoint="/api/products"
-      searchPlaceholder="Search products..."
-      columns={[
-        { key: "id", label: "ID" },
-        { key: "name", label: "Product" },
-        { key: "sku", label: "SKU" },
-        { key: "price", label: "Price" },
-        { key: "status", label: "Status" },
-      ]}
-    />
-  );
+  return <CrudResourcePage title="Products" description="Product records supported by the backend." api={productsApi} fields={[{ name: "name", label: "Name", required: true }, { name: "sku", label: "SKU", required: true }, { name: "description", label: "Description" }, { name: "price", label: "Price", type: "number", required: true }]} columns={["id", "name", "sku", "price", "isActive"]} />;
 }

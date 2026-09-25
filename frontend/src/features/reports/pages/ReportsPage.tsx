@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../../../services/api";
+import { reportsApi } from "../api/reportsApi";
+import { toApiError } from "../../../shared/api/errors";
 
 interface StatusReport {
   status: string;
@@ -35,10 +36,10 @@ export default function ReportsPage() {
       setLoading(true);
       setError("");
 
-      const response = await api.get("/api/reports/orders/summary");
-      setReport(response.data.data);
-    } catch {
-      setError("Unable to load report. Please try again.");
+      const response = await reportsApi.orderSummary();
+      setReport(response as unknown as OrderSummaryReport);
+    } catch (requestError) {
+      setError(toApiError(requestError).message);
     } finally {
       setLoading(false);
     }

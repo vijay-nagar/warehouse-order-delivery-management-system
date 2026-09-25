@@ -42,6 +42,22 @@ export class DeliveryService {
     return this.repository.findAll();
   }
 
+async getTrackingByDeliveryId(deliveryId: number) {
+  const delivery = await this.repository.findById(deliveryId);
+
+  if (!delivery) {
+    throw new Error("Delivery not found");
+  }
+
+  return this.repository.getTrackingByDeliveryId(deliveryId);
+}
+    async getDeliveriesByDeliveryBoy(
+    deliveryBoyUserId: number,
+  ) {
+    return this.repository.findByDeliveryBoyUserId(
+      deliveryBoyUserId,
+    );
+  }
   async getDeliveryById(id: number) {
     return this.repository.findById(id);
   }
