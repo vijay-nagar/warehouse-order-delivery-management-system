@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "./ProtectedRoute";
+import RoleRoute from "./RoleRoute";
 
 import AdminLayout from "../layouts/AdminLayout";
 import AuthLayout from "../layouts/AuthLayout";
@@ -63,6 +64,14 @@ const PackingPage = lazy(
 
 const DeliveryPage = lazy(
   () => import("../../features/delivery/pages/DeliveryPage"),
+);
+
+const MyPickingTasksPage = lazy(
+  () => import("../../features/picking/pages/MyPickingTasksPage"),
+);
+
+const MyPackingTasksPage = lazy(
+  () => import("../../features/packing/pages/MyPackingTasksPage"),
 );
 
 const CustomersPage = lazy(
@@ -187,6 +196,18 @@ function WorkspaceRedirect() {
     return <Navigate to="/delivery-boy" replace />;
   }
 
+  if (hasRole(user, "Delivery Manager")) {
+    return <Navigate to="/delivery" replace />;
+  }
+
+  if (hasRole(user, "Picker")) {
+    return <Navigate to="/picking/my-tasks" replace />;
+  }
+
+  if (hasRole(user, "Packer")) {
+    return <Navigate to="/packing/my-tasks" replace />;
+  }
+
   return <Navigate to="/admin/dashboard" replace />;
 }
 
@@ -270,18 +291,60 @@ export const router = createBrowserRouter([
           },
 
           {
-            path: "/picking",
-            element: load(PickingPage),
+            element: (
+              <RoleRoute
+                allow={["Super Admin", "Warehouse Manager"]}
+              />
+            ),
+            children: [
+              {
+                path: "/picking",
+                element: load(PickingPage),
+              },
+
+              {
+                path: "/packing",
+                element: load(PackingPage),
+              },
+            ],
           },
 
           {
-            path: "/packing",
-            element: load(PackingPage),
+            element: (
+              <RoleRoute
+                allow={[
+                  "Super Admin",
+                  "Warehouse Manager",
+                  "Delivery Manager",
+                ]}
+              />
+            ),
+            children: [
+              {
+                path: "/delivery",
+                element: load(DeliveryPage),
+              },
+            ],
           },
 
           {
-            path: "/delivery",
-            element: load(DeliveryPage),
+            element: <RoleRoute allow={["Picker"]} />,
+            children: [
+              {
+                path: "/picking/my-tasks",
+                element: load(MyPickingTasksPage),
+              },
+            ],
+          },
+
+          {
+            element: <RoleRoute allow={["Packer"]} />,
+            children: [
+              {
+                path: "/packing/my-tasks",
+                element: load(MyPackingTasksPage),
+              },
+            ],
           },
 
           {
@@ -316,27 +379,37 @@ export const router = createBrowserRouter([
       // ======================================
 
       {
-        element: <WarehouseManagerLayout />,
+        element: (
+          <RoleRoute
+            allow={["Super Admin", "Warehouse Manager"]}
+          />
+        ),
 
         children: [
           {
-            path: "/warehouse/dashboard",
-            element: load(WarehouseManagerDashboardPage),
-          },
+            element: <WarehouseManagerLayout />,
 
-          {
-            path: "/warehouse/picking",
-            element: load(PickingPage),
-          },
+            children: [
+              {
+                path: "/warehouse/dashboard",
+                element: load(WarehouseManagerDashboardPage),
+              },
 
-          {
-            path: "/warehouse/packing",
-            element: load(PackingPage),
-          },
+              {
+                path: "/warehouse/picking",
+                element: load(PickingPage),
+              },
 
-          {
-            path: "/warehouse/delivery",
-            element: load(DeliveryPage),
+              {
+                path: "/warehouse/packing",
+                element: load(PackingPage),
+              },
+
+              {
+                path: "/warehouse/delivery",
+                element: load(DeliveryPage),
+              },
+            ],
           },
         ],
       },
@@ -376,34 +449,40 @@ export const router = createBrowserRouter([
       // ======================================
 
       {
-        element: <DeliveryBoyLayout />,
+        element: <RoleRoute allow={["Delivery Boy"]} />,
 
         children: [
           {
-            path: "/delivery-boy",
-            element: load(DeliveryBoyDashboardPage),
-          },
+            element: <DeliveryBoyLayout />,
 
-          {
-            path: "/delivery-boy/deliveries",
-            element: load(MyDeliveriesPage),
-          },
+            children: [
+              {
+                path: "/delivery-boy",
+                element: load(DeliveryBoyDashboardPage),
+              },
 
-          {
-            path: "/delivery-boy/route",
-            element: load(DeliveryRoutePage),
-          },
+              {
+                path: "/delivery-boy/deliveries",
+                element: load(MyDeliveriesPage),
+              },
 
-          {
-            path: "/delivery-boy/notifications",
-            element: load(
-              DeliveryNotificationsPage,
-            ),
-          },
+              {
+                path: "/delivery-boy/route",
+                element: load(DeliveryRoutePage),
+              },
 
-          {
-            path: "/delivery-boy/profile",
-            element: load(DeliveryProfilePage),
+              {
+                path: "/delivery-boy/notifications",
+                element: load(
+                  DeliveryNotificationsPage,
+                ),
+              },
+
+              {
+                path: "/delivery-boy/profile",
+                element: load(DeliveryProfilePage),
+              },
+            ],
           },
         ],
       },

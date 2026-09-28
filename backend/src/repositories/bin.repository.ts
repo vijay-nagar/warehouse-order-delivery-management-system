@@ -77,17 +77,23 @@ export const createBin = async (
 // Get all bins
 export const getAllBins = async (
   pagination: PaginationRequest,
-  filters?: { shelfId?: number },
+  filters?: { shelfId?: number; search?: string },
 ): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
   const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const whereClause = filters?.shelfId !== undefined ? "WHERE ShelfId = @ShelfId" : "";
+  const conditions: string[] = [];
+  if (filters?.shelfId !== undefined) conditions.push("ShelfId = @ShelfId");
+  if (filters?.search) conditions.push("(Name LIKE @Search OR Code LIKE @Search)");
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const applyFilterInputs = (req: sql.Request) => {
+    if (filters?.shelfId !== undefined) req.input("ShelfId", sql.Int, filters.shelfId);
+    if (filters?.search) req.input("Search", sql.NVarChar(250), `%${filters.search}%`);
+  };
 
   const countRequest = pool.request();
-  if (filters?.shelfId !== undefined) {
-    countRequest.input("ShelfId", sql.Int, filters.shelfId);
-  }
+  applyFilterInputs(countRequest);
 
   const countResult = await countRequest.query(`
     SELECT COUNT(*) AS TotalCount FROM Bins ${whereClause}
@@ -100,9 +106,7 @@ export const getAllBins = async (
     .request()
     .input("Offset", sql.Int, offset)
     .input("PageSize", sql.Int, pagination.pageSize);
-  if (filters?.shelfId !== undefined) {
-    listRequest.input("ShelfId", sql.Int, filters.shelfId);
-  }
+  applyFilterInputs(listRequest);
 
   const result = await listRequest.query(`
     SELECT *

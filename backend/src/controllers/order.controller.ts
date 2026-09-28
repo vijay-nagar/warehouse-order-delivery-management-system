@@ -85,7 +85,7 @@ export const createOrder = async (
         : {}),
     };
 
-    const order = await orderService.createOrder(
+    const { order, shortfalls } = await orderService.createOrder(
       input,
       req.user?.userId ?? null,
     );
@@ -98,10 +98,17 @@ export const createOrder = async (
       );
     }
 
+    const outOfStockMessage =
+      order.status === "OUT_OF_STOCK" && shortfalls.length > 0
+        ? `Order created but could not be fulfilled: ${shortfalls
+            .map((s) => `product ${s.productId} needs ${s.required}, only ${s.available} available`)
+            .join("; ")}.`
+        : "Order created successfully";
+
     res.status(201).json({
       success: true,
-      message: "Order created successfully",
-      data: order,
+      message: outOfStockMessage,
+      data: order.status === "OUT_OF_STOCK" ? { ...order, shortfalls } : order,
     });
   } catch (error) {
     if (idempotencyRedisKey) {

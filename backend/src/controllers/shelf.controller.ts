@@ -76,10 +76,13 @@ export const getAllShelves = async (
       typeof zoneIdParam === "string" && Number.isInteger(Number(zoneIdParam))
         ? Number(zoneIdParam)
         : undefined;
+    const search = typeof req.query.search === "string" && req.query.search.trim() ? req.query.search.trim() : undefined;
 
     const shelves = await getAllShelvesService(
       pagination,
-      zoneId !== undefined ? { zoneId } : undefined,
+      zoneId !== undefined || search !== undefined
+        ? { ...(zoneId !== undefined ? { zoneId } : {}), ...(search !== undefined ? { search } : {}) }
+        : undefined,
     );
 
     return res.status(200).json({

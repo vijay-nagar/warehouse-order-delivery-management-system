@@ -5,7 +5,7 @@ import type { PaginationParams } from "../../../shared/types/pagination";
 type Body = Record<string, unknown>;
 export const inventoryApi = {
   create: (data: Body) => request<ResourceRow>({ method: "POST", url: "/api/inventory", data }),
-  list: (params?: PaginationParams & { binId?: number }) =>
+  list: (params?: PaginationParams & { binId?: number; warehouseId?: number; productId?: number }) =>
     requestPaginated<ResourceRow>({ method: "GET", url: "/api/inventory", params }),
   byId: (id: number) => request<ResourceRow>({ method: "GET", url: `/api/inventory/${id}` }),
   update: (id: number, data: Body) => request<ResourceRow>({ method: "PUT", url: `/api/inventory/${id}`, data }),

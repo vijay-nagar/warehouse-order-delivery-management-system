@@ -53,7 +53,7 @@ export const createInventoryService = async (
 
 export const getAllInventoryService = async (
   pagination: PaginationRequest,
-  filters?: { binId?: number },
+  filters?: { binId?: number; warehouseId?: number; productId?: number },
 ) => {
   return getAllInventory(pagination, filters);
 };

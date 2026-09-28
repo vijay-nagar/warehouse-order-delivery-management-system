@@ -216,15 +216,19 @@ export class PickingRepository {
 
   async findAll(
     pagination: PaginationRequest,
-    filters?: { status?: string },
+    filters?: { status?: string; pickerUserId?: number },
   ): Promise<PaginationResult<PickingTaskRow>> {
     const pool = await getDatabasePool();
     const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const whereClause = filters?.status ? "WHERE Status = @Status" : "";
+    const conditions: string[] = [];
+    if (filters?.status) conditions.push("Status = @Status");
+    if (filters?.pickerUserId) conditions.push("PickerUserId = @PickerUserId");
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const countRequest = pool.request();
     if (filters?.status) countRequest.input("Status", sql.NVarChar(20), filters.status);
+    if (filters?.pickerUserId) countRequest.input("PickerUserId", sql.Int, filters.pickerUserId);
 
     const countResult = await countRequest.query<{ TotalCount: number }>(`
       SELECT COUNT(*) AS TotalCount FROM dbo.PickingTasks ${whereClause};
@@ -238,6 +242,7 @@ export class PickingRepository {
       .input("Offset", sql.Int, offset)
       .input("PageSize", sql.Int, pagination.pageSize);
     if (filters?.status) listRequest.input("Status", sql.NVarChar(20), filters.status);
+    if (filters?.pickerUserId) listRequest.input("PickerUserId", sql.Int, filters.pickerUserId);
 
     const result = await listRequest.query<PickingTaskRow>(`
       SELECT
@@ -384,6 +389,41 @@ export class PickingRepository {
           INSERTED.UpdatedAt
         WHERE Id = @Id
           AND Status = 'PENDING';
+
+      `);
+
+    return result.recordset[0] ?? null;
+  }
+
+  async reassign(
+    id: number,
+    pickerUserId: number,
+  ): Promise<PickingTaskRow | null> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("Id", sql.Int, id)
+      .input("PickerUserId", sql.Int, pickerUserId)
+      .query<PickingTaskRow>(`
+        UPDATE dbo.PickingTasks
+        SET
+          PickerUserId = @PickerUserId,
+          AssignedAt = SYSUTCDATETIME(),
+          UpdatedAt = SYSUTCDATETIME()
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderId,
+          INSERTED.PickerUserId,
+          INSERTED.Status,
+          INSERTED.AssignedAt,
+          INSERTED.StartedAt,
+          INSERTED.CompletedAt,
+          INSERTED.Notes,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        WHERE Id = @Id
+          AND Status = 'ASSIGNED';
 
       `);
 

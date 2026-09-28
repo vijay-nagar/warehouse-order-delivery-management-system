@@ -65,6 +65,36 @@ export async function getPackingTasks(req: Request, res: Response) {
   }
 }
 
+export async function getMyPackingTasks(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
+
+    const result = await packingService.getMyTasks(
+      req.user.userId,
+      pagination,
+      status,
+    );
+
+    return res.json({
+      success: true,
+      message: "My packing tasks fetched successfully",
+      data: result.items,
+      pagination: toPaginationMeta(result),
+    });
+  } catch (error) {
+    return sendSafeErrorResponse(res, error, "Failed to get my packing tasks", 500);
+  }
+}
+
 export async function getPackingTaskById(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
@@ -113,6 +143,35 @@ export async function assignPackingTask(req: Request, res: Response) {
     });
   } catch (error) {
     return sendSafeErrorResponse(res, error, "Failed to assign packing task", 400);
+  }
+}
+
+export async function reassignPackingTask(req: Request, res: Response) {
+  const validation = assignPackingTaskSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
+  try {
+    const id = Number(req.params.id);
+
+    const result = await packingService.reassignTask(
+      id,
+      validation.data.packerUserId,
+    );
+
+    return res.json({
+      success: true,
+      message: "Packing task reassigned successfully",
+      data: result,
+    });
+  } catch (error) {
+    return sendSafeErrorResponse(res, error, "Failed to reassign packing task", 400);
   }
 }
 

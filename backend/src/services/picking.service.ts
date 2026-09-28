@@ -50,7 +50,10 @@ export class PickingService {
     return this.repository.getStatusSummary();
   }
 
-  async getTasks(pagination: PaginationRequest, filters?: { status?: string }) {
+  async getTasks(
+    pagination: PaginationRequest,
+    filters?: { status?: string; pickerUserId?: number },
+  ) {
     const result = await this.repository.findAll(pagination, filters);
 
     const items = await Promise.all(
@@ -61,6 +64,17 @@ export class PickingService {
     );
 
     return { ...result, items };
+  }
+
+  async getMyTasks(
+    pickerUserId: number,
+    pagination: PaginationRequest,
+    status?: string,
+  ) {
+    return this.getTasks(pagination, {
+      pickerUserId,
+      ...(status !== undefined ? { status } : {}),
+    });
   }
 
   async getTaskById(id: number) {
@@ -107,6 +121,47 @@ export class PickingService {
       id,
       input.pickerUserId,
     );
+
+    return updated;
+  }
+
+  async reassignTask(
+    id: number,
+    input: AssignPickingTaskInput,
+  ) {
+    const task = await this.repository.findById(id);
+
+    if (!task) {
+      throw new Error("Picking task not found");
+    }
+
+    if (task.Status !== "ASSIGNED") {
+      throw new HttpError(
+        409,
+        `Picking task cannot be reassigned from ${task.Status} status`,
+      );
+    }
+
+    const [isActive, hasRole] = await Promise.all([
+      this.userRepository.isActive(input.pickerUserId),
+      this.userRepository.hasRole(input.pickerUserId, "Picker"),
+    ]);
+
+    if (!isActive || !hasRole) {
+      throw new HttpError(400, "Target user is not an active Picker");
+    }
+
+    const updated = await this.repository.reassign(
+      id,
+      input.pickerUserId,
+    );
+
+    if (!updated) {
+      throw new HttpError(
+        409,
+        "Picking task could not be reassigned (already started or completed)",
+      );
+    }
 
     return updated;
   }

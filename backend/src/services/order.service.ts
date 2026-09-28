@@ -6,7 +6,13 @@ import type {
 import { OrderRepository } from "../repositories/order.repository.js";
 import type { PaginationRequest, PaginationResult } from "../shared/pagination/pagination.types.js";
 import { InventoryReservationRepository } from "../repositories/inventory-reservation.repository.js";
+import type { WarehouseAllocationShortfall } from "../repositories/warehouse-allocation.repository.js";
 import { rabbitMQService } from "../infrastructure/rabbitmq/rabbitmq.service.js";
+
+export interface CreateOrderResult {
+  order: Order;
+  shortfalls: WarehouseAllocationShortfall[];
+}
 
 const publishSafely = async (queue: string, message: unknown): Promise<void> => {
   try {
@@ -28,7 +34,7 @@ export class OrderService {
   async createOrder(
     input: CreateOrderInput,
     actorUserId: number | null = null,
-  ): Promise<Order> {
+  ): Promise<CreateOrderResult> {
     const { order, shortfalls } = await this.orderRepository.create(
       input,
       actorUserId,
@@ -77,7 +83,7 @@ export class OrderService {
       });
     }
 
-    return order;
+    return { order, shortfalls };
   }
 
   async getOrders(

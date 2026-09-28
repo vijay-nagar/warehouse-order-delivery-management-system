@@ -351,6 +351,45 @@ export class DeliveryRepository {
     return result.recordset[0] ?? null;
   }
 
+  async reassign(
+    id: number,
+    deliveryBoyUserId: number,
+  ): Promise<DeliveryRow | null> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("Id", sql.Int, id)
+      .input("DeliveryBoyUserId", sql.Int, deliveryBoyUserId)
+      .query<DeliveryRow>(`
+        UPDATE dbo.Deliveries
+        SET
+          DeliveryBoyUserId = @DeliveryBoyUserId,
+          AssignedAt = SYSUTCDATETIME(),
+          UpdatedAt = SYSUTCDATETIME()
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderId,
+          INSERTED.PackageId,
+          INSERTED.DeliveryBoyUserId,
+          INSERTED.Status,
+          INSERTED.AssignedAt,
+          INSERTED.PickedUpAt,
+          INSERTED.OutForDeliveryAt,
+          INSERTED.DeliveredAt,
+          INSERTED.FailedAt,
+          INSERTED.ReturnedAt,
+          INSERTED.FailureReason,
+          INSERTED.ReturnReason,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        WHERE Id = @Id
+          AND Status = 'ASSIGNED';
+      `);
+
+    return result.recordset[0] ?? null;
+  }
+
   async pickup(id: number): Promise<DeliveryRow | null> {
     return this.updateStatus(id, "PICKED_UP", "PickedUpAt");
   }

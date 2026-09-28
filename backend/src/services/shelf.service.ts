@@ -37,7 +37,7 @@ export const createShelfService = async (
 
 export const getAllShelvesService = async (
   pagination: PaginationRequest,
-  filters?: { zoneId?: number },
+  filters?: { zoneId?: number; search?: string },
 ) => {
   return getAllShelves(pagination, filters);
 };

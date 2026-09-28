@@ -77,16 +77,25 @@ export const getAllInventory = async (
       req.query.page as string | undefined,
       req.query.pageSize as string | undefined,
     );
-    const binIdParam = req.query.binId;
-    const binId =
-      typeof binIdParam === "string" && Number.isInteger(Number(binIdParam))
-        ? Number(binIdParam)
+    const parseIntParam = (value: unknown): number | undefined =>
+      typeof value === "string" && Number.isInteger(Number(value))
+        ? Number(value)
         : undefined;
 
-    const inventory = await getAllInventoryService(
-      pagination,
-      binId !== undefined ? { binId } : undefined,
-    );
+    const binId = parseIntParam(req.query.binId);
+    const warehouseId = parseIntParam(req.query.warehouseId);
+    const productId = parseIntParam(req.query.productId);
+
+    const filters =
+      binId !== undefined || warehouseId !== undefined || productId !== undefined
+        ? {
+            ...(binId !== undefined ? { binId } : {}),
+            ...(warehouseId !== undefined ? { warehouseId } : {}),
+            ...(productId !== undefined ? { productId } : {}),
+          }
+        : undefined;
+
+    const inventory = await getAllInventoryService(pagination, filters);
 
     return res.status(200).json({
       success: true,

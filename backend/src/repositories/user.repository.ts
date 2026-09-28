@@ -100,13 +100,47 @@ export class UserRepository {
           ON p.Id = rp.PermissionId
         INNER JOIN dbo.Roles r
           ON r.Id = ur.RoleId
+        INNER JOIN dbo.Users u
+          ON u.Id = ur.UserId
         WHERE ur.UserId = @userId
           AND p.Name = @permissionName
           AND p.IsActive = 1
-          AND r.IsActive = 1;
+          AND r.IsActive = 1
+          AND u.IsActive = 1;
       `);
 
     return result.recordset.length > 0;
+  }
+
+  async findActiveByRole(
+    roleName: string,
+  ): Promise<Array<{ id: number; username: string; email: string | null }>> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("roleName", sql.NVarChar(100), roleName)
+      .query<{ Id: number; Username: string; Email: string | null }>(`
+        SELECT
+          u.Id,
+          u.Username,
+          u.Email
+        FROM dbo.Users u
+        INNER JOIN dbo.UserRoles ur
+          ON ur.UserId = u.Id
+        INNER JOIN dbo.Roles r
+          ON r.Id = ur.RoleId
+        WHERE r.Name = @roleName
+          AND r.IsActive = 1
+          AND u.IsActive = 1
+        ORDER BY u.Username;
+      `);
+
+    return result.recordset.map((row) => ({
+      id: row.Id,
+      username: row.Username,
+      email: row.Email,
+    }));
   }
 
   async hasRole(userId: number, roleName: string): Promise<boolean> {

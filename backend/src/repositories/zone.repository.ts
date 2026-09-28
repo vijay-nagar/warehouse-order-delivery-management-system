@@ -99,17 +99,23 @@ export const createZone = async (
 // Get All Zones
 export const getAllZones = async (
   pagination: PaginationRequest,
-  filters?: { warehouseId?: number },
+  filters?: { warehouseId?: number; search?: string },
 ): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
   const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const whereClause = filters?.warehouseId !== undefined ? "WHERE WarehouseId = @WarehouseId" : "";
+  const conditions: string[] = [];
+  if (filters?.warehouseId !== undefined) conditions.push("WarehouseId = @WarehouseId");
+  if (filters?.search) conditions.push("(Name LIKE @Search OR Code LIKE @Search)");
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const applyFilterInputs = (req: sql.Request) => {
+    if (filters?.warehouseId !== undefined) req.input("WarehouseId", sql.Int, filters.warehouseId);
+    if (filters?.search) req.input("Search", sql.NVarChar(250), `%${filters.search}%`);
+  };
 
   const countRequest = pool.request();
-  if (filters?.warehouseId !== undefined) {
-    countRequest.input("WarehouseId", sql.Int, filters.warehouseId);
-  }
+  applyFilterInputs(countRequest);
 
   const countResult = await countRequest.query(`
     SELECT COUNT(*) AS TotalCount FROM Zones ${whereClause};
@@ -122,9 +128,7 @@ export const getAllZones = async (
     .request()
     .input("Offset", sql.Int, offset)
     .input("PageSize", sql.Int, pagination.pageSize);
-  if (filters?.warehouseId !== undefined) {
-    listRequest.input("WarehouseId", sql.Int, filters.warehouseId);
-  }
+  applyFilterInputs(listRequest);
 
   const result = await listRequest.query(`
     SELECT

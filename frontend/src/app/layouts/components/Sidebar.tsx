@@ -31,7 +31,17 @@ const navigation: NavigationItem[] = [
   {
     label: "Delivery",
     path: "/delivery",
-    roles: ["Super Admin", "Warehouse Manager"],
+    roles: ["Super Admin", "Warehouse Manager", "Delivery Manager"],
+  },
+  {
+    label: "My Picking Tasks",
+    path: "/picking/my-tasks",
+    roles: ["Picker"],
+  },
+  {
+    label: "My Packing Tasks",
+    path: "/packing/my-tasks",
+    roles: ["Packer"],
   },
   {
     label: "Orders",

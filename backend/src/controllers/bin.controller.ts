@@ -76,10 +76,13 @@ export const getAllBins = async (
       typeof shelfIdParam === "string" && Number.isInteger(Number(shelfIdParam))
         ? Number(shelfIdParam)
         : undefined;
+    const search = typeof req.query.search === "string" && req.query.search.trim() ? req.query.search.trim() : undefined;
 
     const bins = await getAllBinsService(
       pagination,
-      shelfId !== undefined ? { shelfId } : undefined,
+      shelfId !== undefined || search !== undefined
+        ? { ...(shelfId !== undefined ? { shelfId } : {}), ...(search !== undefined ? { search } : {}) }
+        : undefined,
     );
 
     return res.status(200).json({

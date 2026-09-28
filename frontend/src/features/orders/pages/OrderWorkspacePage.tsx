@@ -1,39 +1,27 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "../../../shared/components/overlay/Dialog";
-import {
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from "../../../shared/components/feedback/AsyncStates";
+import { SearchSelect } from "../../../shared/components/forms/SearchSelect";
+import { ErrorState, LoadingState, PageHeader, StatusBadge } from "../../../shared/components/feedback/AsyncStates";
 import { Pagination } from "../../../shared/components/table/Pagination";
 import { useToast } from "../../../app/providers/ToastProvider";
 import { usePaginatedResourceList } from "../../../shared/hooks/usePaginatedResourceList";
 import { ordersApi } from "../api/ordersApi";
-import { productsApi } from "../../products/api/productsApi";
+import { customersApi } from "../../customers/api/customersApi";
 import { warehousesApi } from "../../warehouse/api/warehouseApi";
+import { productsApi } from "../../products/api/productsApi";
+import { inventoryApi } from "../../inventory/api/inventoryApi";
 import { toApiError } from "../../../shared/api/errors";
 import type { ResourceRow } from "../../../shared/types/api";
 
-type OrderItem = {
-  productId: number;
+interface OrderItemDraft {
+  key: string;
+  product: ResourceRow | null;
   quantity: number;
-  productName: string;
-};
+  availableStock: number | null;
+  stockLoading: boolean;
+}
 
-type CreateForm = {
-  customerId: string;
-  warehouseId: string;
-  shippingAddressLine1: string;
-  shippingAddressLine2: string;
-  shippingCity: string;
-  shippingState: string;
-  shippingPostalCode: string;
-};
-
-const emptyForm: CreateForm = {
-  customerId: "",
-  warehouseId: "",
+const emptyShipping = {
   shippingAddressLine1: "",
   shippingAddressLine2: "",
   shippingCity: "",
@@ -41,52 +29,39 @@ const emptyForm: CreateForm = {
   shippingPostalCode: "",
 };
 
-const positiveInteger = (value: number) =>
-  Number.isInteger(value) && value > 0;
+const newItemDraft = (): OrderItemDraft => ({
+  key: Math.random().toString(36).slice(2),
+  product: null,
+  quantity: 1,
+  availableStock: null,
+  stockLoading: false,
+});
 
-const getId = (row: ResourceRow) => Number(row.id ?? row.Id);
-
-const getProductLabel = (row: ResourceRow) =>
-  `${String(row.name ?? row.Name ?? `Product #${row.id ?? row.Id}`)}${
-    row.sku ?? row.SKU ? ` (${String(row.sku ?? row.SKU)})` : ""
-  }`;
-
-const getWarehouseLabel = (row: ResourceRow) =>
-  `${String(row.name ?? row.Name ?? `Warehouse #${row.id ?? row.Id}`)}${
-    row.code ?? row.Code ? ` (${String(row.code ?? row.Code)})` : ""
-  }`;
+const isRowActive = (row: ResourceRow) => (row.IsActive ?? row.isActive) !== false;
+const rowName = (row: ResourceRow) => String(row.Name ?? row.name ?? "");
+const productPrice = (row: ResourceRow) => Number(row.price ?? row.Price ?? 0);
+const productSku = (row: ResourceRow) => String(row.sku ?? row.SKU ?? row.Sku ?? "");
+const inventoryAvailable = (row: ResourceRow) => Number(row.AvailableQuantity ?? row.availableQuantity ?? 0);
+const money = (value: number) =>
+  value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function OrderWorkspacePage() {
-  const {
-    rows,
-    loading,
-    error,
-    reload,
-    page,
-    pageSize,
-    setPage,
-    setPageSize,
-    pagination,
-  } = usePaginatedResourceList(ordersApi.list);
-
+  const { rows, loading, error, reload, page, pageSize, setPage, setPageSize, pagination } =
+    usePaginatedResourceList(ordersApi.list);
   const { notify } = useToast();
 
   const [detail, setDetail] = useState<ResourceRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const [products, setProducts] = useState<ResourceRow[]>([]);
+  const [customer, setCustomer] = useState<ResourceRow | null>(null);
   const [warehouses, setWarehouses] = useState<ResourceRow[]>([]);
-  const [optionsLoading, setOptionsLoading] = useState(false);
-
-  const [form, setForm] = useState<CreateForm>(emptyForm);
-  const [items, setItems] = useState<OrderItem[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [warehouseId, setWarehouseId] = useState<string>("");
+  const [shipping, setShipping] = useState(emptyShipping);
+  const [items, setItems] = useState<OrderItemDraft[]>([newItemDraft()]);
 
   const view = async (id: number) => {
     setBusy(true);
-
     try {
       setDetail(await ordersApi.byId(id));
     } catch (requestError) {
@@ -98,9 +73,7 @@ export default function OrderWorkspacePage() {
 
   const cancel = async (id: number) => {
     if (!window.confirm("Cancel this CREATED order?")) return;
-
     setBusy(true);
-
     try {
       await ordersApi.cancel(id);
       await reload();
@@ -113,193 +86,164 @@ export default function OrderWorkspacePage() {
     }
   };
 
-  const openCreate = async () => {
-    setForm(emptyForm);
-    setItems([]);
-    setSelectedProductId("");
-    setQuantity("1");
+  const openCreate = () => {
+    setCustomer(null);
+    setWarehouseId("");
+    setShipping(emptyShipping);
+    setItems([newItemDraft()]);
     setCreating(true);
-
-    if (products.length > 0 && warehouses.length > 0) {
-      return;
-    }
-
-    setOptionsLoading(true);
-
-    try {
-      const [productResult, warehouseResult] = await Promise.all([
-        productsApi.list(),
-        warehousesApi.list(),
-      ]);
-
-      setProducts(productResult.data);
-      setWarehouses(warehouseResult.data);
-    } catch (requestError) {
-      notify(toApiError(requestError).message);
-      setCreating(false);
-    } finally {
-      setOptionsLoading(false);
-    }
   };
 
-  const addItem = () => {
-    const productId = Number(selectedProductId);
-    const itemQuantity = Number(quantity);
+  useEffect(() => {
+    if (!creating) return;
+    warehousesApi
+      .list({ pageSize: 100 })
+      .then((result) => setWarehouses(result.data.filter(isRowActive)))
+      .catch(() => setWarehouses([]));
+  }, [creating]);
 
-    if (!positiveInteger(productId)) {
-      notify("Please select a product.");
-      return;
-    }
-
-    if (!positiveInteger(itemQuantity)) {
-      notify("Quantity must be a positive whole number.");
-      return;
-    }
-
-    const product = products.find((row) => getId(row) === productId);
-
-    if (!product) {
-      notify("Selected product was not found.");
-      return;
-    }
-
-    setItems((current) => {
-      const existing = current.find((item) => item.productId === productId);
-
-      if (existing) {
-        return current.map((item) =>
-          item.productId === productId
-            ? {
-                ...item,
-                quantity: item.quantity + itemQuantity,
-              }
-            : item
+  const refreshStock = useCallback(
+    async (draftKey: string, product: ResourceRow | null, warehouse: string) => {
+      if (!product) {
+        setItems((current) =>
+          current.map((it) => (it.key === draftKey ? { ...it, availableStock: null, stockLoading: false } : it)),
         );
+        return;
       }
 
-      return [
-        ...current,
-        {
+      setItems((current) => current.map((it) => (it.key === draftKey ? { ...it, stockLoading: true } : it)));
+
+      try {
+        const productId = Number(product.id);
+        const warehouseIdNum = warehouse ? Number(warehouse) : undefined;
+        const result = await inventoryApi.list({
+          pageSize: 50,
           productId,
-          quantity: itemQuantity,
-          productName: getProductLabel(product),
-        },
-      ];
+          ...(warehouseIdNum !== undefined ? { warehouseId: warehouseIdNum } : {}),
+        });
+        const total = result.data
+          .filter(isRowActive)
+          .reduce((sum, row) => sum + inventoryAvailable(row), 0);
+
+        setItems((current) =>
+          current.map((it) => (it.key === draftKey ? { ...it, availableStock: total, stockLoading: false } : it)),
+        );
+      } catch {
+        setItems((current) =>
+          current.map((it) => (it.key === draftKey ? { ...it, availableStock: null, stockLoading: false } : it)),
+        );
+      }
+    },
+    [],
+  );
+
+  const handleWarehouseChange = (value: string) => {
+    setWarehouseId(value);
+    items.forEach((it) => {
+      if (it.product) void refreshStock(it.key, it.product, value);
     });
-
-    setSelectedProductId("");
-    setQuantity("1");
   };
 
-  const removeItem = (productId: number) => {
-    setItems((current) =>
-      current.filter((item) => item.productId !== productId)
-    );
+  const setItemProduct = (key: string, product: ResourceRow | null) => {
+    setItems((current) => current.map((it) => (it.key === key ? { ...it, product, quantity: 1 } : it)));
+    void refreshStock(key, product, warehouseId);
   };
+
+  const setItemQuantity = (key: string, quantity: number) => {
+    const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1;
+    setItems((current) => current.map((it) => (it.key === key ? { ...it, quantity: safeQuantity } : it)));
+  };
+
+  const addItemRow = () => setItems((current) => [...current, newItemDraft()]);
+  const removeItemRow = (key: string) =>
+    setItems((current) => (current.length > 1 ? current.filter((it) => it.key !== key) : current));
+
+  const filledItems = items.filter((it) => it.product !== null);
+  const subtotal = filledItems.reduce((sum, it) => sum + productPrice(it.product as ResourceRow) * it.quantity, 0);
+  const totalUnits = filledItems.reduce((sum, it) => sum + it.quantity, 0);
 
   const create = async () => {
-    const customerId = Number(form.customerId);
-    const warehouseId = Number(form.warehouseId);
-
-    if (!positiveInteger(customerId)) {
-      notify("Customer ID must be a positive whole number.");
-      return;
-    }
-
-    if (!positiveInteger(warehouseId)) {
-      notify("Please select a warehouse.");
-      return;
-    }
-
-    if (items.length === 0) {
-      notify("Please add at least one product.");
-      return;
-    }
-
-    if (!form.shippingAddressLine1.trim()) {
-      notify("Shipping address is required.");
-      return;
-    }
-
-    if (!form.shippingCity.trim()) {
-      notify("City is required.");
-      return;
-    }
-
-    if (!form.shippingState.trim()) {
-      notify("State is required.");
-      return;
-    }
-
-    if (!form.shippingPostalCode.trim()) {
-      notify("Postal code is required.");
-      return;
-    }
-
     setBusy(true);
-
     try {
-      await ordersApi.create({
-        customerId,
-        warehouseId,
-        shippingAddressLine1: form.shippingAddressLine1.trim(),
-        ...(form.shippingAddressLine2.trim()
-          ? { shippingAddressLine2: form.shippingAddressLine2.trim() }
+      if (!customer) {
+        throw new Error("Validation: select a customer.");
+      }
+
+      if (filledItems.length === 0) {
+        throw new Error("Validation: add at least one product to the order.");
+      }
+
+      for (const it of filledItems) {
+        if (it.availableStock !== null && it.quantity > it.availableStock) {
+          throw new Error(
+            `Validation: only ${it.availableStock} unit(s) of ${rowName(it.product as ResourceRow)} are available.`,
+          );
+        }
+      }
+
+      if (
+        !shipping.shippingAddressLine1.trim() ||
+        !shipping.shippingCity.trim() ||
+        !shipping.shippingState.trim() ||
+        !shipping.shippingPostalCode.trim()
+      ) {
+        throw new Error("Validation: complete the shipping address.");
+      }
+
+      const created = await ordersApi.create({
+        customerId: Number(customer.id),
+        ...(warehouseId ? { warehouseId: Number(warehouseId) } : {}),
+        shippingAddressLine1: shipping.shippingAddressLine1.trim(),
+        ...(shipping.shippingAddressLine2.trim()
+          ? { shippingAddressLine2: shipping.shippingAddressLine2.trim() }
           : {}),
-        shippingCity: form.shippingCity.trim(),
-        shippingState: form.shippingState.trim(),
-        shippingPostalCode: form.shippingPostalCode.trim(),
-        items: items.map(({ productId, quantity }) => ({
-          productId,
-          quantity,
+        shippingCity: shipping.shippingCity.trim(),
+        shippingState: shipping.shippingState.trim(),
+        shippingPostalCode: shipping.shippingPostalCode.trim(),
+        items: filledItems.map((it) => ({
+          productId: Number((it.product as ResourceRow).id),
+          quantity: it.quantity,
         })),
       });
 
       await reload();
-
       setCreating(false);
-      setForm(emptyForm);
-      setItems([]);
-      setSelectedProductId("");
-      setQuantity("1");
 
-      notify("Order created successfully.");
+      const shortfalls = Array.isArray(created.shortfalls) ? (created.shortfalls as ResourceRow[]) : [];
+      if (created.status === "OUT_OF_STOCK" && shortfalls.length > 0) {
+        notify(
+          `Order created, but stock is insufficient: ${shortfalls
+            .map((s) => `product ${s.productId} needs ${s.required}, only ${s.available} in stock`)
+            .join("; ")}.`,
+        );
+      } else {
+        notify("Order created.");
+      }
     } catch (requestError) {
-      notify(toApiError(requestError).message);
+      notify(
+        requestError instanceof Error && requestError.message.startsWith("Validation:")
+          ? requestError.message.replace("Validation: ", "")
+          : toApiError(requestError).message,
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  if (loading) {
-    return <LoadingState label="Loading orders..." />;
-  }
-
-  if (error) {
-    return (
-      <ErrorState
-        message={error.message}
-        onRetry={() => void reload()}
-      />
-    );
-  }
+  if (loading) return <LoadingState label="Loading orders..." />;
+  if (error) return <ErrorState message={error.message} onRetry={() => void reload()} />;
 
   return (
     <section className="module-page">
       <PageHeader
         title="Orders"
-        description="Create and manage customer orders."
+        description="Orders with backend-supported create, detail, and cancellation."
         action={
-          <button
-            type="button"
-            className="module-refresh-button"
-            onClick={() => void openCreate()}
-          >
+          <button type="button" className="module-refresh-button" onClick={openCreate}>
             Create order
           </button>
         }
       />
-
       <div className="module-panel">
         <div className="module-table-wrapper">
           <table className="module-table">
@@ -313,12 +257,10 @@ export default function OrderWorkspacePage() {
                 <th>Actions</th>
               </tr>
             </thead>
-
             <tbody>
               {rows.map((order) => {
                 const id = Number(order.id);
                 const status = String(order.status);
-
                 return (
                   <tr key={id}>
                     <td>{String(order.orderNumber ?? id)}</td>
@@ -329,20 +271,11 @@ export default function OrderWorkspacePage() {
                     </td>
                     <td>{String(order.totalAmount ?? "-")}</td>
                     <td>
-                      <button
-                        type="button"
-                        onClick={() => void view(id)}
-                        disabled={busy}
-                      >
+                      <button type="button" onClick={() => void view(id)} disabled={busy}>
                         Details
                       </button>
-
                       {status === "CREATED" ? (
-                        <button
-                          type="button"
-                          onClick={() => void cancel(id)}
-                          disabled={busy}
-                        >
+                        <button type="button" onClick={() => void cancel(id)} disabled={busy}>
                           Cancel
                         </button>
                       ) : null}
@@ -353,7 +286,6 @@ export default function OrderWorkspacePage() {
             </tbody>
           </table>
         </div>
-
         <Pagination
           page={page}
           pageCount={pagination?.totalPages ?? 1}
@@ -364,250 +296,219 @@ export default function OrderWorkspacePage() {
         />
       </div>
 
-      <Dialog
-        open={detail !== null}
-        title="Order details"
-        onClose={() => setDetail(null)}
-      >
-        {detail ? (
-          <pre className="record-details">
-            {JSON.stringify(detail, null, 2)}
-          </pre>
-        ) : null}
+      <Dialog open={detail !== null} title="Order details" onClose={() => setDetail(null)}>
+        {detail ? <pre className="record-details">{JSON.stringify(detail, null, 2)}</pre> : null}
       </Dialog>
 
-      <Dialog
-        open={creating}
-        title="Create order"
-        onClose={() => setCreating(false)}
-      >
-        {optionsLoading ? (
-          <LoadingState label="Loading products and warehouses..." />
-        ) : (
-          <form
-            className="login-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void create();
-            }}
-          >
-            <label className="form-field">
-              <span>Customer ID</span>
-              <input
-                required
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]+"
-                autoComplete="off"
-                value={form.customerId}
-                placeholder="Enter customer ID"
-                onChange={(event) => {
-                  const value = event.target.value.replace(/\D/g, "");
+      <Dialog open={creating} title="Create order" onClose={() => setCreating(false)}>
+        <form
+          className="login-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void create();
+          }}
+        >
+          <SearchSelect
+            id="order-customer"
+            label="Customer"
+            placeholder="Search customer by name, phone or email"
+            value={customer}
+            onChange={setCustomer}
+            autoFocus
+            required
+            fetchOptions={(search) =>
+              customersApi.list({ search: search || undefined, pageSize: 8 }).then((result) => result.data)
+            }
+            getLabel={(row) => rowName(row)}
+            getDescription={(row) => [row.phone, row.email].filter(Boolean).join(" · ") || undefined}
+          />
 
-                  setForm((current) => ({
-                    ...current,
-                    customerId: value,
-                  }));
-                }}
-              />
-            </label>
+          <label className="form-field" htmlFor="order-warehouse">
+            <span>Warehouse</span>
+            <select
+              id="order-warehouse"
+              value={warehouseId}
+              onChange={(event) => handleWarehouseChange(event.target.value)}
+            >
+              <option value="">Auto-select (recommended)</option>
+              {warehouses.map((warehouse) => (
+                <option key={String(warehouse.Id ?? warehouse.id)} value={String(warehouse.Id ?? warehouse.id)}>
+                  {rowName(warehouse)}
+                </option>
+              ))}
+            </select>
+            <small>
+              Auto-select finds the first warehouse that can fulfil every item on this order. Pick a specific
+              warehouse to check stock and reserve from that location only.
+            </small>
+          </label>
 
-            <label className="form-field">
-              <span>Warehouse</span>
-              <select
-                required
-                value={form.warehouseId}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    warehouseId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Select warehouse</option>
+          <label className="form-field" htmlFor="order-address-1">
+            <span>Shipping address line 1</span>
+            <input
+              id="order-address-1"
+              type="text"
+              required
+              maxLength={500}
+              placeholder="House / street / area"
+              value={shipping.shippingAddressLine1}
+              onChange={(event) => setShipping((current) => ({ ...current, shippingAddressLine1: event.target.value }))}
+            />
+          </label>
 
-                {warehouses.map((warehouse) => (
-                  <option key={getId(warehouse)} value={getId(warehouse)}>
-                    {getWarehouseLabel(warehouse)}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <label className="form-field" htmlFor="order-address-2">
+            <span>Shipping address line 2 (optional)</span>
+            <input
+              id="order-address-2"
+              type="text"
+              maxLength={500}
+              placeholder="Landmark / apartment"
+              value={shipping.shippingAddressLine2}
+              onChange={(event) => setShipping((current) => ({ ...current, shippingAddressLine2: event.target.value }))}
+            />
+          </label>
 
-            <div className="form-field">
-              <span>Add product</span>
+          <label className="form-field" htmlFor="order-city">
+            <span>City</span>
+            <input
+              id="order-city"
+              type="text"
+              required
+              maxLength={100}
+              placeholder="e.g. Jaipur"
+              value={shipping.shippingCity}
+              onChange={(event) => setShipping((current) => ({ ...current, shippingCity: event.target.value }))}
+            />
+          </label>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "end",
-                }}
-              >
-                <select
-                  value={selectedProductId}
-                  onChange={(event) =>
-                    setSelectedProductId(event.target.value)
-                  }
-                  style={{ flex: 1 }}
-                >
-                  <option value="">Select product</option>
+          <label className="form-field" htmlFor="order-state">
+            <span>State</span>
+            <input
+              id="order-state"
+              type="text"
+              required
+              maxLength={100}
+              placeholder="e.g. Rajasthan"
+              value={shipping.shippingState}
+              onChange={(event) => setShipping((current) => ({ ...current, shippingState: event.target.value }))}
+            />
+          </label>
 
-                  {products.map((product) => (
-                    <option key={getId(product)} value={getId(product)}>
-                      {getProductLabel(product)}
-                    </option>
-                  ))}
-                </select>
+          <label className="form-field" htmlFor="order-postal-code">
+            <span>Postal code</span>
+            <input
+              id="order-postal-code"
+              type="text"
+              required
+              maxLength={20}
+              placeholder="e.g. 302001"
+              value={shipping.shippingPostalCode}
+              onChange={(event) => setShipping((current) => ({ ...current, shippingPostalCode: event.target.value }))}
+            />
+          </label>
 
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={quantity}
-                  onChange={(event) => setQuantity(event.target.value)}
-                  style={{ width: "90px" }}
-                  aria-label="Quantity"
-                />
-
-                <button type="button" onClick={addItem}>
-                  Add
-                </button>
-              </div>
-            </div>
-
-            {items.length > 0 ? (
-              <div className="form-field">
-                <span>Order items</span>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                  }}
-                >
-                  {items.map((item) => (
-                    <div
-                      key={item.productId}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "8px 10px",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <span>
-                        {item.productName} × {item.quantity}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.productId)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <small>No products added yet.</small>
-            )}
-
-            <label className="form-field">
-              <span>Shipping address</span>
-              <input
-                required
-                type="text"
-                maxLength={500}
-                value={form.shippingAddressLine1}
-                placeholder="House / street / area"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    shippingAddressLine1: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="form-field">
-              <span>Address line 2 (optional)</span>
-              <input
-                type="text"
-                maxLength={500}
-                value={form.shippingAddressLine2}
-                placeholder="Apartment / landmark"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    shippingAddressLine2: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="form-field">
-              <span>City</span>
-              <input
-                required
-                type="text"
-                maxLength={100}
-                value={form.shippingCity}
-                placeholder="Enter city"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    shippingCity: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="form-field">
-              <span>State</span>
-              <input
-                required
-                type="text"
-                maxLength={100}
-                value={form.shippingState}
-                placeholder="Enter state"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    shippingState: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="form-field">
-              <span>Postal code</span>
-              <input
-                required
-                type="text"
-                inputMode="numeric"
-                maxLength={20}
-                autoComplete="postal-code"
-                value={form.shippingPostalCode}
-                placeholder="Enter postal code"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    shippingPostalCode: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <button className="login-submit" disabled={busy}>
-              {busy ? "Creating..." : "Create order"}
+          <div className="form-field">
+            <span>Order items</span>
+            <table className="order-items-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Quantity</th>
+                  <th>Available</th>
+                  <th>Price</th>
+                  <th>Total</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => {
+                  const overStock = item.availableStock !== null && item.quantity > item.availableStock;
+                  return (
+                    <tr key={item.key}>
+                      <td>
+                        <SearchSelect
+                          id={`order-item-product-${item.key}`}
+                          label=""
+                          placeholder="Search product by name or SKU"
+                          value={item.product}
+                          onChange={(product) => setItemProduct(item.key, product)}
+                          fetchOptions={(search) =>
+                            productsApi.list({ search: search || undefined, pageSize: 8 }).then((result) => result.data)
+                          }
+                          getLabel={(row) => rowName(row)}
+                          getDescription={(row) => productSku(row) || undefined}
+                        />
+                      </td>
+                      <td className="order-items-qty">
+                        <button
+                          type="button"
+                          disabled={!item.product || item.quantity <= 1}
+                          onClick={() => setItemQuantity(item.key, item.quantity - 1)}
+                          aria-label="Decrease quantity"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          disabled={!item.product}
+                          value={item.quantity}
+                          onChange={(event) => setItemQuantity(item.key, Number(event.target.value))}
+                        />
+                        <button
+                          type="button"
+                          disabled={!item.product}
+                          onClick={() => setItemQuantity(item.key, item.quantity + 1)}
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                        {overStock ? (
+                          <span className="order-items-stock-warning">Only {item.availableStock} available.</span>
+                        ) : null}
+                      </td>
+                      <td>
+                        {!item.product ? "-" : item.stockLoading ? "..." : (item.availableStock ?? "-")}
+                      </td>
+                      <td>{item.product ? money(productPrice(item.product)) : "-"}</td>
+                      <td>{item.product ? money(productPrice(item.product) * item.quantity) : "-"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="order-item-remove"
+                          disabled={items.length <= 1}
+                          onClick={() => removeItemRow(item.key)}
+                          aria-label="Remove item"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <button type="button" className="order-items-add" onClick={addItemRow}>
+              + Add product
             </button>
-          </form>
-        )}
+          </div>
+
+          <div className="order-summary">
+            <div className="order-summary-row">
+              <span>Total items</span>
+              <span>{totalUnits}</span>
+            </div>
+            <div className="order-summary-row order-summary-total">
+              <span>Subtotal</span>
+              <span>{money(subtotal)}</span>
+            </div>
+          </div>
+
+          <button className="login-submit" disabled={busy}>
+            {busy ? "Creating..." : "Create order"}
+          </button>
+        </form>
       </Dialog>
     </section>
   );

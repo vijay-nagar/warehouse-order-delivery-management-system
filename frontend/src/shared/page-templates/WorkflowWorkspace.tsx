@@ -10,23 +10,36 @@ import { Pagination } from "../components/table/Pagination";
 import { useToast } from "../../app/providers/ToastProvider";
 import { usePaginatedResourceList } from "../hooks/usePaginatedResourceList";
 import { toApiError } from "../api/errors";
+import { getStoredUser } from "../../features/auth/storage/authStorage";
+import { hasRole } from "../permissions/access";
 import type { ResourceRow } from "../types/api";
 import type { PaginatedResult, PaginationParams } from "../types/pagination";
+
+export interface WorkflowFieldOption {
+  value: number | string;
+  label: string;
+}
 
 export interface WorkflowField {
   name: string;
   label: string;
-  type?: "number" | "text";
+  type?: "number" | "text" | "select";
   required?: boolean;
   min?: number;
   max?: number;
   step?: number | "any";
   maxLength?: number;
+  options?: WorkflowFieldOption[];
+  placeholder?: string;
 }
 
 export interface WorkflowAction {
   label: string;
   statuses: string[];
+  // Restricts who may see/trigger this action in the UI. Backend routes are
+  // the real enforcement boundary; this only keeps managers from seeing
+  // worker-only controls (and vice versa) as required by the role split.
+  roles?: string[];
   fields?: WorkflowField[];
   confirm?: string;
   execute: (
@@ -73,6 +86,11 @@ export function WorkflowWorkspace({
   const [submitting, setSubmitting] =
     useState(false);
 
+  const currentUser = getStoredUser();
+
+  const isActionVisible = (item: WorkflowAction) =>
+    !item.roles || item.roles.some((role) => hasRole(currentUser, role));
+
   const showDetail = async (id: number) => {
     setSubmitting(true);
 
@@ -97,7 +115,7 @@ export function WorkflowWorkspace({
         return;
       }
 
-      if (field.type === "number" && value) {
+      if ((field.type === "number" || field.type === "select") && value) {
         const numberValue = Number(value);
 
         if (
@@ -128,7 +146,7 @@ export function WorkflowWorkspace({
       const data = Object.fromEntries(
         (action.fields ?? []).map((field) => [
           field.name,
-          field.type === "number"
+          field.type === "number" || field.type === "select"
             ? Number(values[field.name])
             : values[field.name],
         ]),
@@ -254,10 +272,11 @@ export function WorkflowWorkspace({
                       </button>
 
                       {actions
-                        .filter((item) =>
-                          item.statuses.includes(
-                            status,
-                          ),
+                        .filter(
+                          (item) =>
+                            item.statuses.includes(
+                              status,
+                            ) && isActionVisible(item),
                         )
                         .map((item) => (
                           <button
@@ -330,36 +349,68 @@ export function WorkflowWorkspace({
               >
                 <span>{field.label}</span>
 
-                <input
-                  required={field.required}
-                  type={field.type ?? "text"}
-                  min={
-                    field.type === "number"
-                      ? field.min
-                      : undefined
-                  }
-                  max={
-                    field.type === "number"
-                      ? field.max
-                      : undefined
-                  }
-                  step={
-                    field.type === "number"
-                      ? field.step
-                      : undefined
-                  }
-                  maxLength={field.maxLength}
-                  value={
-                    values[field.name] ?? ""
-                  }
-                  onChange={(event) =>
-                    setValues((current) => ({
-                      ...current,
-                      [field.name]:
-                        event.target.value,
-                    }))
-                  }
-                />
+                {field.type === "select" ? (
+                  <select
+                    required={field.required}
+                    value={
+                      values[field.name] ?? ""
+                    }
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        [field.name]:
+                          event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="" disabled>
+                      {field.placeholder ??
+                        `Select ${field.label.toLowerCase()}`}
+                    </option>
+
+                    {(field.options ?? []).map(
+                      (option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                        >
+                          {option.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    required={field.required}
+                    type={field.type ?? "text"}
+                    min={
+                      field.type === "number"
+                        ? field.min
+                        : undefined
+                    }
+                    max={
+                      field.type === "number"
+                        ? field.max
+                        : undefined
+                    }
+                    step={
+                      field.type === "number"
+                        ? field.step
+                        : undefined
+                    }
+                    maxLength={field.maxLength}
+                    value={
+                      values[field.name] ?? ""
+                    }
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        [field.name]:
+                          event.target.value,
+                      }))
+                    }
+                  />
+                )}
               </label>
             ),
           )}

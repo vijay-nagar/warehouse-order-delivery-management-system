@@ -124,6 +124,50 @@ export class DeliveryService {
     return result;
   }
 
+  async reassign(id: number, deliveryBoyUserId: number) {
+    const delivery = await this.repository.findById(id);
+
+    if (!delivery) {
+      throw new Error("Delivery not found");
+    }
+
+    if (delivery.Status !== "ASSIGNED") {
+      throw new HttpError(409, "Delivery must be in ASSIGNED status");
+    }
+
+    const [isActive, hasRole] = await Promise.all([
+      this.userRepository.isActive(deliveryBoyUserId),
+      this.userRepository.hasRole(deliveryBoyUserId, "Delivery Boy"),
+    ]);
+
+    if (!isActive || !hasRole) {
+      throw new HttpError(
+        400,
+        "Target user is not an active Delivery Boy",
+      );
+    }
+
+    const result = await this.repository.reassign(id, deliveryBoyUserId);
+
+    if (!result) {
+      throw new HttpError(
+        409,
+        "Delivery could not be reassigned (already picked up or completed)",
+      );
+    }
+
+    rabbitMQService
+      .publish("DELIVERY_ASSIGNED", {
+        event: "DELIVERY_ASSIGNED",
+        deliveryId: result.Id,
+        orderId: result.OrderId,
+        deliveryBoyUserId,
+      })
+      .catch((error) => console.error("[DELIVERY] Failed to publish DELIVERY_ASSIGNED:", error));
+
+    return result;
+  }
+
   async pickup(id: number, actorUserId: number) {
     await this.requireOwnedStatus(id, actorUserId, "ASSIGNED");
 

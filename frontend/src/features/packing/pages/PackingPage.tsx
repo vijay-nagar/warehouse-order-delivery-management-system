@@ -9,6 +9,7 @@ import type { PaginationParams } from "../../../shared/types/pagination";
 import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 import { packingApi } from "../api/packingApi";
+import { usersApi, type EligibleUser } from "../../../shared/api/usersApi";
 
 type PackingStatus =
   | "ALL"
@@ -23,6 +24,9 @@ export default function PackingPage() {
 
   const [packingRows, setPackingRows] =
     useState<ResourceRow[]>([]);
+
+  const [eligiblePackers, setEligiblePackers] =
+    useState<EligibleUser[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -39,7 +43,20 @@ export default function PackingPage() {
       }
     };
 
+    const loadEligiblePackers = async () => {
+      try {
+        const packers = await usersApi.eligible("Packer");
+
+        if (!active) return;
+
+        setEligiblePackers(packers);
+      } catch {
+        // Assign/Reassign dialogs will just show an empty dropdown.
+      }
+    };
+
     void loadPackingCounts();
+    void loadEligiblePackers();
 
     return () => {
       active = false;
@@ -59,18 +76,28 @@ export default function PackingPage() {
     ).length;
   };
 
+  const packerOptions = eligiblePackers.map((packer) => ({
+    value: packer.id,
+    label: packer.email
+      ? `${packer.username} (${packer.email})`
+      : packer.username,
+  }));
+
+  // Manager/admin queue: assign and reassign work to a Packer. Packing
+  // execution (start/create package/complete) lives on the Packer's own
+  // "My Packing Tasks" page.
   const packingActions: WorkflowAction[] = [
     {
       label: "Assign",
       statuses: ["PENDING"],
+      roles: ["Super Admin", "Warehouse Manager"],
       fields: [
         {
           name: "packerUserId",
-          label: "Packer user ID",
-          type: "number",
+          label: "Packer",
+          type: "select",
           required: true,
-          min: 1,
-          step: 1,
+          options: packerOptions,
         },
       ],
       execute: (id, data) =>
@@ -78,40 +105,20 @@ export default function PackingPage() {
     },
 
     {
-      label: "Start",
+      label: "Reassign",
       statuses: ["ASSIGNED"],
-      execute: (id) =>
-        packingApi.start(id),
-    },
-
-    {
-      label: "Create package",
-      statuses: ["PACKING"],
+      roles: ["Super Admin", "Warehouse Manager"],
       fields: [
         {
-          name: "weight",
-          label: "Weight",
-          type: "number",
-          min: Number.EPSILON,
-          step: "any",
+          name: "packerUserId",
+          label: "Packer",
+          type: "select",
+          required: true,
+          options: packerOptions,
         },
       ],
       execute: (id, data) =>
-        packingApi.createPackage(id, data),
-    },
-
-    {
-      label: "Complete",
-      statuses: ["PACKING"],
-      fields: [
-        {
-          name: "notes",
-          label: "Notes",
-          maxLength: 1000,
-        },
-      ],
-      execute: (id, data) =>
-        packingApi.complete(id, data),
+        packingApi.reassign(id, data),
     },
   ];
 

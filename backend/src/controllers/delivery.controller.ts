@@ -262,6 +262,41 @@ export async function assignDelivery(
   }
 }
 
+export async function reassignDelivery(
+  req: Request,
+  res: Response,
+) {
+  const validation = assignDeliverySchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+  }
+
+  try {
+    const result = await deliveryService.reassign(
+      Number(req.params.id),
+      validation.data.deliveryBoyUserId,
+    );
+
+    return res.json({
+      success: true,
+      message: "Delivery reassigned successfully",
+      data: result,
+    });
+  } catch (error) {
+    return sendSafeErrorResponse(
+      res,
+      error,
+      "Failed to reassign delivery",
+      400,
+    );
+  }
+}
+
 // Pickup Delivery
 export async function pickupDelivery(
   req: AuthenticatedRequest,

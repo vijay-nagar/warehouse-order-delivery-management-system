@@ -157,15 +157,19 @@ export class PackingRepository {
 
   async findAll(
     pagination: PaginationRequest,
-    filters?: { status?: string },
+    filters?: { status?: string; packerUserId?: number },
   ): Promise<PaginationResult<PackingTaskRow>> {
     const pool = await getDatabasePool();
     const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-    const whereClause = filters?.status ? "WHERE Status = @Status" : "";
+    const conditions: string[] = [];
+    if (filters?.status) conditions.push("Status = @Status");
+    if (filters?.packerUserId) conditions.push("PackerUserId = @PackerUserId");
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const countRequest = pool.request();
     if (filters?.status) countRequest.input("Status", sql.NVarChar(20), filters.status);
+    if (filters?.packerUserId) countRequest.input("PackerUserId", sql.Int, filters.packerUserId);
 
     const countResult = await countRequest.query<{ TotalCount: number }>(`
       SELECT COUNT(*) AS TotalCount FROM dbo.PackingTasks ${whereClause};
@@ -179,6 +183,7 @@ export class PackingRepository {
       .input("Offset", sql.Int, offset)
       .input("PageSize", sql.Int, pagination.pageSize);
     if (filters?.status) listRequest.input("Status", sql.NVarChar(20), filters.status);
+    if (filters?.packerUserId) listRequest.input("PackerUserId", sql.Int, filters.packerUserId);
 
     const result = await listRequest.query<PackingTaskRow>(`
       SELECT
@@ -268,6 +273,42 @@ export class PackingRepository {
           INSERTED.UpdatedAt
         WHERE Id = @Id
           AND Status = 'PENDING';
+      `);
+
+    return result.recordset[0] ?? null;
+  }
+
+  async reassign(
+    id: number,
+    packerUserId: number,
+  ): Promise<PackingTaskRow | null> {
+    const pool = await getDatabasePool();
+
+    const result = await pool
+      .request()
+      .input("Id", sql.Int, id)
+      .input("PackerUserId", sql.Int, packerUserId)
+      .query<PackingTaskRow>(`
+        UPDATE dbo.PackingTasks
+        SET
+          PackerUserId = @PackerUserId,
+          AssignedAt = SYSUTCDATETIME(),
+          UpdatedAt = SYSUTCDATETIME()
+        OUTPUT
+          INSERTED.Id,
+          INSERTED.OrderId,
+          INSERTED.PickingTaskId,
+          INSERTED.PackerUserId,
+          INSERTED.Status,
+          INSERTED.PackageCount,
+          INSERTED.AssignedAt,
+          INSERTED.StartedAt,
+          INSERTED.CompletedAt,
+          INSERTED.Notes,
+          INSERTED.CreatedAt,
+          INSERTED.UpdatedAt
+        WHERE Id = @Id
+          AND Status = 'ASSIGNED';
       `);
 
     return result.recordset[0] ?? null;

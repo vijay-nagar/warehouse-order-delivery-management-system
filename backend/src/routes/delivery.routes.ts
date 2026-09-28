@@ -6,6 +6,7 @@ import {
   getDeliveryTracking,
   getDeliveryAttempts,
   assignDelivery,
+  reassignDelivery,
   pickupDelivery,
   outForDelivery,
   deliverDelivery,
@@ -74,8 +75,17 @@ router.post(
   "/:id/assign",
   requirePositiveIntParam("id"),
   requirePermission("DELIVERY_ASSIGN"),
-  requireRoles("Delivery Boy"),
+  requireRoles("Super Admin", "Warehouse Manager", "Delivery Manager"),
   assignDelivery,
+);
+
+// Reassign Delivery
+router.post(
+  "/:id/reassign",
+  requirePositiveIntParam("id"),
+  requirePermission("DELIVERY_ASSIGN"),
+  requireRoles("Super Admin", "Warehouse Manager", "Delivery Manager"),
+  reassignDelivery,
 );
 
 // Pickup Delivery

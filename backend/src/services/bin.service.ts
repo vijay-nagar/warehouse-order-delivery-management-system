@@ -37,7 +37,7 @@ export const createBinService = async (
 
 export const getAllBinsService = async (
   pagination: PaginationRequest,
-  filters?: { shelfId?: number },
+  filters?: { shelfId?: number; search?: string },
 ) => {
   return getAllBins(pagination, filters);
 };

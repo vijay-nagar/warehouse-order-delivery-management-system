@@ -104,6 +104,44 @@ export const getPickingTasks = async (
   }
 };
 
+export const getMyPickingTasks = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const pagination = parsePagination(
+      req.query.page as string | undefined,
+      req.query.pageSize as string | undefined,
+    );
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
+
+    const tasks = await pickingService.getMyTasks(
+      req.user.userId,
+      pagination,
+      status,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "My picking tasks fetched successfully",
+      data: tasks.items,
+      pagination: toPaginationMeta(tasks),
+    });
+  } catch (error) {
+    console.error("Get my picking tasks error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch my picking tasks",
+    });
+  }
+};
+
 export const getPickingTaskById = async (
   req: Request,
   res: Response,
@@ -180,6 +218,50 @@ export const assignPickingTask = async (
   } catch (error) {
     console.error("Assign picking task error:", error);
     sendSafeErrorResponse(res, error, "Failed to assign picking task", 400);
+  }
+};
+
+export const reassignPickingTask = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid picking task ID",
+    });
+    return;
+  }
+
+  const validation = assignPickingTaskSchema.safeParse(
+    req.body,
+  );
+
+  if (!validation.success) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid request",
+      errors: validation.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const task = await pickingService.reassignTask(
+      id,
+      validation.data,
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Picking task reassigned successfully",
+      data: task,
+    });
+  } catch (error) {
+    console.error("Reassign picking task error:", error);
+    sendSafeErrorResponse(res, error, "Failed to reassign picking task", 400);
   }
 };
 

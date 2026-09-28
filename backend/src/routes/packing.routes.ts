@@ -6,8 +6,10 @@ import { requirePositiveIntParam } from "../middleware/param-validation.middlewa
 import {
   createPackingTask,
   getPackingTasks,
+  getMyPackingTasks,
   getPackingTaskById,
   assignPackingTask,
+  reassignPackingTask,
   startPackingTask,
   createPackage,
   completePackingTask,
@@ -19,10 +21,15 @@ router.use(authenticate);
 
 router.post("/", requirePermission("PACKING_CREATE"), createPackingTask);
 router.get("/", requirePermission("PACKING_VIEW"), getPackingTasks);
+// Packer - My Assigned Packing Tasks
+// Must be before /:id
+router.get("/my-tasks", requirePermission("PACKING_VIEW"), getMyPackingTasks);
 router.get("/:id",
   requirePositiveIntParam("id"), requirePermission("PACKING_VIEW"), getPackingTaskById);
 router.post("/:id/assign",
-  requirePositiveIntParam("id"), requirePermission("PACKING_ASSIGN"), requireRoles("Packer"), assignPackingTask);
+  requirePositiveIntParam("id"), requirePermission("PACKING_ASSIGN"), requireRoles("Super Admin", "Warehouse Manager"), assignPackingTask);
+router.post("/:id/reassign",
+  requirePositiveIntParam("id"), requirePermission("PACKING_ASSIGN"), requireRoles("Super Admin", "Warehouse Manager"), reassignPackingTask);
 router.post("/:id/start",
   requirePositiveIntParam("id"), requirePermission("PACKING_START"), requireRoles("Packer"), startPackingTask);
 router.post("/:id/packages",

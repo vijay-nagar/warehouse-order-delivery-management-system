@@ -165,17 +165,25 @@ export const createInventory = async (
 
 export const getAllInventory = async (
   pagination: PaginationRequest,
-  filters?: { binId?: number },
+  filters?: { binId?: number; warehouseId?: number; productId?: number },
 ): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
   const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const whereClause = filters?.binId !== undefined ? "WHERE i.BinId = @BinId" : "";
+  const conditions: string[] = [];
+  if (filters?.binId !== undefined) conditions.push("i.BinId = @BinId");
+  if (filters?.warehouseId !== undefined) conditions.push("i.WarehouseId = @WarehouseId");
+  if (filters?.productId !== undefined) conditions.push("i.ProductId = @ProductId");
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const applyFilterInputs = (req: sql.Request) => {
+    if (filters?.binId !== undefined) req.input("BinId", sql.Int, filters.binId);
+    if (filters?.warehouseId !== undefined) req.input("WarehouseId", sql.Int, filters.warehouseId);
+    if (filters?.productId !== undefined) req.input("ProductId", sql.Int, filters.productId);
+  };
 
   const countRequest = pool.request();
-  if (filters?.binId !== undefined) {
-    countRequest.input("BinId", sql.Int, filters.binId);
-  }
+  applyFilterInputs(countRequest);
 
   const countResult = await countRequest.query(`
     SELECT COUNT(*) AS TotalCount FROM Inventory i ${whereClause};
@@ -188,9 +196,7 @@ export const getAllInventory = async (
     .request()
     .input("Offset", sql.Int, offset)
     .input("PageSize", sql.Int, pagination.pageSize);
-  if (filters?.binId !== undefined) {
-    listRequest.input("BinId", sql.Int, filters.binId);
-  }
+  applyFilterInputs(listRequest);
 
   const result = await listRequest.query(`
     ${INVENTORY_SELECT_WITH_LOCATION}

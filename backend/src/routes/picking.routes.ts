@@ -2,11 +2,13 @@
 
 import {
   assignPickingTask,
+  reassignPickingTask,
   completePickingTask,
   updatePickingItem,
   createPickingTask,
   getPickingTaskById,
   getPickingTasks,
+  getMyPickingTasks,
   getPickingStatusSummary,
   startPickingTask,
 } from "../controllers/picking.controller.js";
@@ -38,6 +40,14 @@ router.get(
   getPickingStatusSummary,
 );
 
+// Picker - My Assigned Picking Tasks
+// Must be before /:id
+router.get(
+  "/my-tasks",
+  requirePermission("PICKING_VIEW"),
+  getMyPickingTasks,
+);
+
 router.get(
   "/:id",
   requirePositiveIntParam("id"),
@@ -51,6 +61,14 @@ router.post(
   requirePermission("PICKING_ASSIGN"),
   requireRoles("Picker", "Warehouse Manager"),
   assignPickingTask,
+);
+
+router.post(
+  "/:id/reassign",
+  requirePositiveIntParam("id"),
+  requirePermission("PICKING_ASSIGN"),
+  requireRoles("Super Admin", "Warehouse Manager"),
+  reassignPickingTask,
 );
 
 router.post(

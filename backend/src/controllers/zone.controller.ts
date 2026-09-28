@@ -78,10 +78,13 @@ export const getAllZones = async (
       typeof warehouseIdParam === "string" && Number.isInteger(Number(warehouseIdParam))
         ? Number(warehouseIdParam)
         : undefined;
+    const search = typeof req.query.search === "string" && req.query.search.trim() ? req.query.search.trim() : undefined;
 
     const zones = await getAllZonesService(
       pagination,
-      warehouseId !== undefined ? { warehouseId } : undefined,
+      warehouseId !== undefined || search !== undefined
+        ? { ...(warehouseId !== undefined ? { warehouseId } : {}), ...(search !== undefined ? { search } : {}) }
+        : undefined,
     );
 
     return res.status(200).json({

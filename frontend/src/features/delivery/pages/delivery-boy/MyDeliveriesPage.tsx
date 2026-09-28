@@ -177,6 +177,41 @@ export default function MyDeliveriesPage() {
                         Mark Delivered
                       </button>
                     )}
+
+                    {(deliveryStatus === "PICKED_UP" ||
+                      deliveryStatus === "OUT_FOR_DELIVERY") && (
+                      <button
+                        type="button"
+                        className="db-button db-button-danger"
+                        onClick={async () => {
+                          const failureReason = window.prompt(
+                            "Reason for failed delivery:",
+                          );
+                          if (!failureReason) return;
+                          await deliveryApi.fail(Number(id), { failureReason });
+                          await loadDeliveries();
+                        }}
+                      >
+                        Mark Failed
+                      </button>
+                    )}
+
+                    {deliveryStatus === "FAILED" && (
+                      <button
+                        type="button"
+                        className="db-button db-button-secondary"
+                        onClick={async () => {
+                          const returnReason = window.prompt(
+                            "Reason for return:",
+                          );
+                          if (!returnReason) return;
+                          await deliveryApi.return(Number(id), { returnReason });
+                          await loadDeliveries();
+                        }}
+                      >
+                        Mark Returned
+                      </button>
+                    )}
                   </div>
                 </div>
               );

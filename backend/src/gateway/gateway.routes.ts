@@ -25,6 +25,7 @@ import deliveryRoutes from "../routes/delivery.routes.js";
 import notificationRoutes from "../routes/notification.routes.js";
 import reportRoutes from "../routes/report.routes.js";
 import supportRoutes from "../routes/support.routes.js";
+import userRoutes from "../routes/user.routes.js";
 
 export const createGatewayRouter = (): Router => {
   const router = Router();
@@ -169,6 +170,12 @@ export const createGatewayRouter = (): Router => {
     "/support",
     gatewayAuthenticate,
     supportRoutes,
+  );
+
+  router.use(
+    "/users",
+    gatewayAuthenticate,
+    userRoutes,
   );
 
   /*

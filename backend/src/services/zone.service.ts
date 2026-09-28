@@ -43,7 +43,7 @@ export const createZoneService = async (
 // Get All Zones
 export const getAllZonesService = async (
   pagination: PaginationRequest,
-  filters?: { warehouseId?: number },
+  filters?: { warehouseId?: number; search?: string },
 ) => {
   return getAllZones(pagination, filters);
 };

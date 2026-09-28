@@ -52,6 +52,30 @@ textarea:focus-visible {
 .dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .dialog h2 { margin: 0; }
 .dialog header button { border: 0; background: transparent; font-size: 24px; }
+.dialog-body { display: grid; gap: 16px; }
+
+.search-select { position: relative; }
+.search-select-chosen { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 14px; background: #f8fafc; }
+.search-select-clear { border: 0; background: transparent; font-size: 18px; color: #64748b; line-height: 1; padding: 4px; }
+.search-select-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 12px 24px rgb(15 23 42 / 15%); }
+.search-select-list li { display: block; }
+.search-select-list li button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border: 0; background: transparent; border-radius: 8px; }
+.search-select-list li button:hover { background: #eff6ff; }
+.search-select-list li button small { color: #64748b; font-size: 12px; }
+.search-select-status { padding: 10px; color: #64748b; font-size: 14px; }
+.search-select-status.search-select-error { color: #b91c1c; }
+
+.order-items-table { width: 100%; border-collapse: collapse; }
+.order-items-table th, .order-items-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; }
+.order-items-table td.order-items-qty { display: flex; align-items: center; gap: 6px; }
+.order-items-table td.order-items-qty button { width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
+.order-items-table td.order-items-qty input { width: 60px; text-align: center; min-height: 32px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.order-items-table .order-item-remove { border: 0; background: transparent; color: #b91c1c; }
+.order-items-stock-warning { color: #b91c1c; font-size: 12px; }
+.order-items-add { align-self: start; border: 1px dashed #94a3b8; border-radius: 8px; padding: 8px 12px; background: transparent; color: #2563eb; font-weight: 600; }
+.order-summary { display: grid; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.order-summary-row { display: flex; justify-content: space-between; font-size: 14px; }
+.order-summary-row.order-summary-total { font-weight: 700; font-size: 16px; border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 4px; }
 
 .app-shell {
   display: flex;
@@ -985,9 +1009,10 @@ textarea:focus-visible {
 
 .module-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 1180px;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: auto;
 }
 
 /* Table Header */
@@ -1008,13 +1033,15 @@ textarea:focus-visible {
 /* Table Cells */
 
 .module-table td {
-  max-width: 320px;
+  max-width: 360px;
   padding: 16px 18px;
   border-bottom: 1px solid #eef2f7;
   color: #334155;
   font-size: 14px;
   line-height: 1.5;
   vertical-align: middle;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .module-table tbody tr {
@@ -2900,6 +2927,16 @@ textarea:focus-visible {
   background: #15803d;
 }
 
+.db-button-danger {
+  border: 0;
+  background: #dc2626;
+  color: #fff;
+}
+
+.db-button-danger:hover {
+  background: #b91c1c;
+}
+
 /* Toolbar */
 
 .db-toolbar {
@@ -3667,10 +3704,12 @@ textarea:focus-visible {
    ========================================================= */
 
 .module-table td:last-child {
-  white-space: normal;
-  min-width: 360px;
+  white-space: nowrap;
+  min-width: 250px;
   width: 1%;
   vertical-align: middle;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 /* Action buttons inside workflow table */
@@ -3911,5 +3950,53 @@ textarea:focus-visible {
 @media (max-width: 600px) {
   .workflow-delivery-summary-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+
+/* =========================================================
+   CRUD TABLE - PROFESSIONAL COLUMN SIZING
+   ========================================================= */
+
+.module-table-cell {
+  white-space: nowrap;
+}
+
+.module-table-cell-content {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.module-table-cell-id,
+.module-table-cell-phone,
+.module-table-cell-city,
+.module-table-cell-isactive {
+  white-space: nowrap;
+}
+
+.module-table-cell-name {
+  min-width: 170px;
+  white-space: normal;
+}
+
+.module-table-cell-email {
+  min-width: 320px;
+  max-width: 420px;
+  white-space: normal;
+}
+
+.module-table-cell-email .module-table-cell-content {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.module-table td:last-child {
+  min-width: 250px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .module-table {
+    min-width: 1180px;
   }
 }

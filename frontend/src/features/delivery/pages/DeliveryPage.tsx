@@ -9,6 +9,7 @@ import type { PaginatedResult, PaginationParams } from "../../../shared/types/pa
 import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 import { deliveryApi } from "../api/deliveryApi";
+import { usersApi, type EligibleUser } from "../../../shared/api/usersApi";
 
 type DeliveryStatus =
   | "ALL"
@@ -25,6 +26,9 @@ export default function DeliveryPage() {
   const [deliveryRows, setDeliveryRows] =
     useState<ResourceRow[]>([]);
 
+  const [eligibleDeliveryBoys, setEligibleDeliveryBoys] =
+    useState<EligibleUser[]>([]);
+
   useEffect(() => {
     let active = true;
 
@@ -40,7 +44,20 @@ export default function DeliveryPage() {
       }
     };
 
+    const loadEligibleDeliveryBoys = async () => {
+      try {
+        const deliveryBoys = await usersApi.eligible("Delivery Boy");
+
+        if (!active) return;
+
+        setEligibleDeliveryBoys(deliveryBoys);
+      } catch {
+        // Assign/Reassign dialogs will just show an empty dropdown.
+      }
+    };
+
     void loadDeliveryCounts();
+    void loadEligibleDeliveryBoys();
 
     return () => {
       active = false;
@@ -77,18 +94,28 @@ export default function DeliveryPage() {
     ).length;
   };
 
+  const deliveryBoyOptions = eligibleDeliveryBoys.map((deliveryBoy) => ({
+    value: deliveryBoy.id,
+    label: deliveryBoy.email
+      ? `${deliveryBoy.username} (${deliveryBoy.email})`
+      : deliveryBoy.username,
+  }));
+
+  // Manager/admin queue: assign and reassign work to a Delivery Boy.
+  // Delivery execution (pickup/out-for-delivery/delivered/failed/returned)
+  // lives on the Delivery Boy's own "My Deliveries" page.
   const deliveryActions: WorkflowAction[] = [
     {
       label: "Assign",
       statuses: ["PENDING"],
+      roles: ["Super Admin", "Warehouse Manager", "Delivery Manager"],
       fields: [
         {
           name: "deliveryBoyUserId",
-          label: "Delivery user ID",
-          type: "number",
+          label: "Delivery Boy",
+          type: "select",
           required: true,
-          min: 1,
-          step: 1,
+          options: deliveryBoyOptions,
         },
       ],
       execute: (id, data) =>
@@ -96,95 +123,20 @@ export default function DeliveryPage() {
     },
 
     {
-      label: "Pickup",
+      label: "Reassign",
       statuses: ["ASSIGNED"],
-      execute: (id) =>
-        deliveryApi.pickup(id),
-    },
-
-    {
-      label: "Out fordelivery",
-      statuses: ["PICKED_UP"],
-      execute: (id) =>
-        deliveryApi.outForDelivery(id),
-    },
-
-    {
-      label: "Add tracking",
-      statuses: [
-        "PICKED_UP",
-        "OUT_FOR_DELIVERY",
-      ],
+      roles: ["Super Admin", "Warehouse Manager", "Delivery Manager"],
       fields: [
         {
-          name: "latitude",
-          label: "Latitude",
-          type: "number",
+          name: "deliveryBoyUserId",
+          label: "Delivery Boy",
+          type: "select",
           required: true,
-          min: -90,
-          max: 90,
-          step: "any",
-        },
-        {
-          name: "longitude",
-          label: "Longitude",
-          type: "number",
-          required: true,
-          min: -180,
-          max: 180,
-          step: "any",
-        },
-        {
-          name: "remarks",
-          label: "Remarks",
-          maxLength: 500,
+          options: deliveryBoyOptions,
         },
       ],
       execute: (id, data) =>
-        deliveryApi.addTracking(id, data),
-    },
-
-    {
-      label: "Mark delivered",
-      statuses: ["OUT_FOR_DELIVERY"],
-      execute: (id) =>
-        deliveryApi.deliver(id),
-    },
-
-    {
-      label: "Mark failed",
-      statuses: [
-        "PICKED_UP",
-        "OUT_FOR_DELIVERY",
-      ],
-      confirm: "Mark this delivery as failed?",
-      fields: [
-        {
-          name: "failureReason",
-          label: "Failure reason",
-          required: true,
-          maxLength: 1000,
-        },
-      ],
-      execute: (id, data) =>
-        deliveryApi.fail(id, data),
-    },
-
-    {
-      label: "Return",
-      statuses: ["FAILED"],
-      confirm:
-        "Mark this failed delivery as returned?",
-      fields: [
-        {
-          name: "returnReason",
-          label: "Return reason",
-          required: true,
-          maxLength: 1000,
-        },
-      ],
-      execute: (id, data) =>
-        deliveryApi.return(id, data),
+        deliveryApi.reassign(id, data),
     },
   ];
 

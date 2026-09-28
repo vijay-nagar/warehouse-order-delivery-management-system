@@ -9,6 +9,7 @@ import type { PaginationParams } from "../../../shared/types/pagination";
 import { MAX_PAGE_SIZE } from "../../../shared/types/pagination";
 
 import { pickingApi } from "../api/pickingApi";
+import { usersApi, type EligibleUser } from "../../../shared/api/usersApi";
 
 type PickingStatus =
   | "ALL"
@@ -23,6 +24,9 @@ export default function PickingPage() {
 
   const [pickingRows, setPickingRows] =
     useState<ResourceRow[]>([]);
+
+  const [eligiblePickers, setEligiblePickers] =
+    useState<EligibleUser[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -39,7 +43,20 @@ export default function PickingPage() {
       }
     };
 
+    const loadEligiblePickers = async () => {
+      try {
+        const pickers = await usersApi.eligible("Picker");
+
+        if (!active) return;
+
+        setEligiblePickers(pickers);
+      } catch {
+        // Assign/Reassign dialogs will just show an empty dropdown.
+      }
+    };
+
     void loadPickingCounts();
+    void loadEligiblePickers();
 
     return () => {
       active = false;
@@ -59,18 +76,29 @@ export default function PickingPage() {
     ).length;
   };
 
+  const pickerOptions = eligiblePickers.map((picker) => ({
+    value: picker.id,
+    label: picker.email
+      ? `${picker.username} (${picker.email})`
+      : picker.username,
+  }));
+
+  // Manager/admin queue: assign and reassign work to a Picker. Picking
+  // execution (start/update/complete) lives on the Picker's own "My
+  // Picking Tasks" page — managers don't get worker execution controls
+  // here per the manager-vs-worker split.
   const pickingActions: WorkflowAction[] = [
     {
       label: "Assign",
       statuses: ["PENDING"],
+      roles: ["Super Admin", "Warehouse Manager"],
       fields: [
         {
           name: "pickerUserId",
-          label: "Picker user ID",
-          type: "number",
+          label: "Picker",
+          type: "select",
           required: true,
-          min: 1,
-          step: 1,
+          options: pickerOptions,
         },
       ],
       execute: (id, data) =>
@@ -78,57 +106,20 @@ export default function PickingPage() {
     },
 
     {
-      label: "Start",
+      label: "Reassign",
       statuses: ["ASSIGNED"],
-      execute: (id) =>
-        pickingApi.start(id),
-    },
-
-    {
-      label: "Update picked quantity",
-      statuses: ["PICKING"],
+      roles: ["Super Admin", "Warehouse Manager"],
       fields: [
         {
-          name: "itemId",
-          label: "Picking item ID",
-          type: "number",
+          name: "pickerUserId",
+          label: "Picker",
+          type: "select",
           required: true,
-          min: 1,
-          step: 1,
-        },
-        {
-          name: "pickedQuantity",
-          label: "Picked quantity",
-          type: "number",
-          required: true,
-          min: 0,
-          step: 1,
+          options: pickerOptions,
         },
       ],
       execute: (id, data) =>
-        pickingApi.updateItem(
-          id,
-          Number(data.itemId),
-          {
-            pickedQuantity: Number(
-              data.pickedQuantity,
-            ),
-          },
-        ),
-    },
-
-    {
-      label: "Complete",
-      statuses: ["PICKING"],
-      fields: [
-        {
-          name: "notes",
-          label: "Notes",
-          maxLength: 1000,
-        },
-      ],
-      execute: (id, data) =>
-        pickingApi.complete(id, data),
+        pickingApi.reassign(id, data),
     },
   ];
 

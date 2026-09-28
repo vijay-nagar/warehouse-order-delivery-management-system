@@ -77,17 +77,23 @@ export const createShelf = async (
 // Get all shelves
 export const getAllShelves = async (
   pagination: PaginationRequest,
-  filters?: { zoneId?: number },
+  filters?: { zoneId?: number; search?: string },
 ): Promise<PaginationResult<Record<string, unknown>>> => {
   const pool = await getDatabasePool();
   const offset = getPaginationOffset(pagination.page, pagination.pageSize);
 
-  const whereClause = filters?.zoneId !== undefined ? "WHERE ZoneId = @ZoneId" : "";
+  const conditions: string[] = [];
+  if (filters?.zoneId !== undefined) conditions.push("ZoneId = @ZoneId");
+  if (filters?.search) conditions.push("(Name LIKE @Search OR Code LIKE @Search)");
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const applyFilterInputs = (req: sql.Request) => {
+    if (filters?.zoneId !== undefined) req.input("ZoneId", sql.Int, filters.zoneId);
+    if (filters?.search) req.input("Search", sql.NVarChar(250), `%${filters.search}%`);
+  };
 
   const countRequest = pool.request();
-  if (filters?.zoneId !== undefined) {
-    countRequest.input("ZoneId", sql.Int, filters.zoneId);
-  }
+  applyFilterInputs(countRequest);
 
   const countResult = await countRequest.query(`
     SELECT COUNT(*) AS TotalCount FROM Shelves ${whereClause}
@@ -100,9 +106,7 @@ export const getAllShelves = async (
     .request()
     .input("Offset", sql.Int, offset)
     .input("PageSize", sql.Int, pagination.pageSize);
-  if (filters?.zoneId !== undefined) {
-    listRequest.input("ZoneId", sql.Int, filters.zoneId);
-  }
+  applyFilterInputs(listRequest);
 
   const result = await listRequest.query(`
     SELECT *

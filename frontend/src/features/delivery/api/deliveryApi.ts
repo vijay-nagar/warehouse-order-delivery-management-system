@@ -11,6 +11,7 @@ export const deliveryApi = {
     requestPaginated<ResourceRow>({ method: "GET", url: "/api/delivery/my-deliveries", params }),
   byId: (id: number) => request<ResourceRow>({ method: "GET", url: `/api/delivery/${id}` }),
   assign: (id: number, data: Body) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/assign`, data }),
+  reassign: (id: number, data: Body) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/reassign`, data }),
   pickup: (id: number) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/pickup` }),
   outForDelivery: (id: number) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/out-for-delivery` }),
   addTracking: (id: number, data: Body) => request<ResourceRow>({ method: "POST", url: `/api/delivery/${id}/tracking`, data }),

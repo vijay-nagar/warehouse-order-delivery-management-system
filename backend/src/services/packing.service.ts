@@ -40,8 +40,22 @@ export class PackingService {
     );
   }
 
-  async getTasks(pagination: PaginationRequest, filters?: { status?: string }) {
+  async getTasks(
+    pagination: PaginationRequest,
+    filters?: { status?: string; packerUserId?: number },
+  ) {
     return this.repository.findAll(pagination, filters);
+  }
+
+  async getMyTasks(
+    packerUserId: number,
+    pagination: PaginationRequest,
+    status?: string,
+  ) {
+    return this.getTasks(pagination, {
+      packerUserId,
+      ...(status !== undefined ? { status } : {}),
+    });
   }
 
   async getTaskById(id: number) {
@@ -72,6 +86,38 @@ export class PackingService {
 
     if (!result) {
       throw new HttpError(409, "Packing task must be in PENDING status");
+    }
+
+    return result;
+  }
+
+  async reassignTask(id: number, packerUserId: number) {
+    const task = await this.repository.findById(id);
+
+    if (!task) {
+      throw new Error("Packing task not found");
+    }
+
+    if (task.Status !== "ASSIGNED") {
+      throw new HttpError(409, "Packing task must be in ASSIGNED status");
+    }
+
+    const [isActive, hasRole] = await Promise.all([
+      this.userRepository.isActive(packerUserId),
+      this.userRepository.hasRole(packerUserId, "Packer"),
+    ]);
+
+    if (!isActive || !hasRole) {
+      throw new HttpError(400, "Target user is not an active Packer");
+    }
+
+    const result = await this.repository.reassign(id, packerUserId);
+
+    if (!result) {
+      throw new HttpError(
+        409,
+        "Packing task could not be reassigned (already started or completed)",
+      );
     }
 
     return result;
