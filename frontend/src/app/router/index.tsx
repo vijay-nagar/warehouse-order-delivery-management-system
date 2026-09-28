@@ -8,6 +8,8 @@ import AuthLayout from "../layouts/AuthLayout";
 import WarehouseManagerLayout from "../layouts/WarehouseManagerLayout";
 
 import DeliveryBoyLayout from "../../features/delivery/components/delivery-boy/DeliveryBoyLayout";
+import PickerLayout from "../../features/picking/components/PickerLayout";
+
 import { getStoredUser } from "../../features/auth/storage/authStorage";
 import { hasRole } from "../../shared/permissions/access";
 
@@ -96,6 +98,22 @@ const WarehouseManagerDashboardPage = lazy(
 );
 
 // ==========================================
+// PICKER PAGES
+// ==========================================
+
+const PickerDashboardPage = lazy(
+  () => import("../../features/picking/pages/PickerDashboardPage"),
+);
+
+const PickerTasksPage = lazy(
+  () => import("../../features/picking/pages/PickerTasksPage"),
+);
+
+const PickerTaskDetailsPage = lazy(
+  () => import("../../features/picking/pages/PickerTaskDetailsPage"),
+);
+
+// ==========================================
 // DELIVERY BOY PAGES
 // ==========================================
 
@@ -159,6 +177,10 @@ function WorkspaceRedirect() {
 
   if (hasRole(user, "Warehouse Manager")) {
     return <Navigate to="/warehouse/dashboard" replace />;
+  }
+
+  if (hasRole(user, "Picker")) {
+    return <Navigate to="/picker/dashboard" replace />;
   }
 
   if (hasRole(user, "Delivery Boy")) {
@@ -315,6 +337,36 @@ export const router = createBrowserRouter([
           {
             path: "/warehouse/delivery",
             element: load(DeliveryPage),
+          },
+        ],
+      },
+
+      // ======================================
+      // PICKER APPLICATION
+      // ======================================
+
+      {
+        element: <PickerLayout />,
+
+        children: [
+          {
+            path: "/picker/dashboard",
+            element: load(PickerDashboardPage),
+          },
+
+          {
+            path: "/picker/tasks",
+            element: load(PickerTasksPage),
+          },
+
+          {
+            path: "/picker/tasks/:id",
+            element: load(PickerTaskDetailsPage),
+          },
+
+          {
+            path: "/picker/history",
+            element: load(PickerTasksPage),
           },
         ],
       },

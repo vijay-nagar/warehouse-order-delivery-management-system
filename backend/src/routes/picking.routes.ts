@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 
 import {
   assignPickingTask,
@@ -49,7 +49,7 @@ router.post(
   "/:id/assign",
   requirePositiveIntParam("id"),
   requirePermission("PICKING_ASSIGN"),
-  requireRoles("Picker"),
+  requireRoles("Picker", "Warehouse Manager"),
   assignPickingTask,
 );
 
@@ -57,7 +57,7 @@ router.post(
   "/:id/start",
   requirePositiveIntParam("id"),
   requirePermission("PICKING_START"),
-  requireRoles("Picker"),
+  requireRoles("Picker", "Warehouse Manager"),
   startPickingTask,
 );
 
@@ -65,7 +65,7 @@ router.post(
   "/:id/complete",
   requirePositiveIntParam("id"),
   requirePermission("PICKING_COMPLETE"),
-  requireRoles("Picker"),
+  requireRoles("Picker", "Warehouse Manager"),
   completePickingTask,
 );
 
@@ -74,8 +74,9 @@ router.patch(
   requirePositiveIntParam("id"),
   requirePositiveIntParam("itemId"),
   requirePermission("PICKING_UPDATE_ITEM"),
-  requireRoles("Picker"),
+  requireRoles("Picker", "Warehouse Manager"),
   updatePickingItem,
 );
 
 export default router;
+
