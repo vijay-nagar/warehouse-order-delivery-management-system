@@ -72,19 +72,28 @@ export default function LoginPage() {
         return normalizedRole === "deliveryboy";
       });
 
-      // Delivery Boy gets a completely separate application
-      if (isDeliveryBoy) {
+      const isPicker = response.user.roles.some((role) => {
+        const normalizedRole = role
+          .trim()
+          .toLowerCase()
+          .replace(/[\s_-]+/g, "");
+
+        return normalizedRole === "picker";
+      });
+
+      if (isPicker) {
+        navigate("/picker/dashboard", {
+          replace: true,
+        });
+      } else if (isDeliveryBoy) {
         navigate("/delivery-boy", {
           replace: true,
         });
       } else {
-        // Admin/other authenticated users
-        // continue to their requested/default page
         navigate(from, {
           replace: true,
         });
-      }
-    } finally {
+      }    } finally {
       setLoading(false);
     }
   };
@@ -103,10 +112,10 @@ export default function LoginPage() {
           </p>
 
           <div className="login-feature-list">
-            <div>✓ Order Management</div>
-            <div>✓ Inventory Control</div>
-            <div>✓ Picking &amp; Packing</div>
-            <div>✓ Delivery Tracking</div>
+            <div>âœ“ Order Management</div>
+            <div>âœ“ Inventory Control</div>
+            <div>âœ“ Picking &amp; Packing</div>
+            <div>âœ“ Delivery Tracking</div>
           </div>
         </div>
       </div>
